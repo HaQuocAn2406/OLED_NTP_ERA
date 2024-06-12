@@ -331,10 +331,7 @@ void handle_rotary_button() {
       on_button_short_click();
       onsubmenu=true;
       shortpress=1;
-      int dem_double=0;
-      dem_double++;
       changemode=!changemode;
-
     }
     isLongpress = false;
     isSettingpress = false;
