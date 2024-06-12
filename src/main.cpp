@@ -1,3 +1,8 @@
+/*
+Giữ Nút 3s để chuyển qua lại giữ màn hình setting và màn hình chính
+Nhấn để chọn các chế độ
+Giữ để lưu và quay lại màn hình setting
+*/
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -39,7 +44,6 @@ unsigned long longPressAfterMiliseconds = 2000;
 unsigned long entersettingAfterMiliseconds = 3000;
 unsigned long chagneModeAfterMiliseconds =1000;
 int changemode=0;
-static bool wasButtonDown = false;
 bool onsubmenu=false;
 int dem=0;
 int dem_region=0;
@@ -76,10 +80,18 @@ void setup() {
   rotaryEncoder.setup(readEncoderISR);
   rotaryEncoder.setBoundaries(-99999, 99999, true);
   rotaryEncoder.disableAcceleration();
+  Serial.print("Chip Model: ");
+  Serial.println(ESP.getChipModel());
+  Serial.print("Number of core: ");
+  Serial.println(ESP.getChipCores());
+  Serial.print("Setup() is Running on Core: ");
+  Serial.println(xPortGetCoreID());
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
+  Serial.print("loop() is Running on Core: ");
+  Serial.println(xPortGetCoreID());
   rotary_loop();
   if(dem==0 && shortpress==1)
   {
@@ -286,44 +298,48 @@ void on_button_changemode_click()
 }
 void handle_rotary_button() {
   static unsigned long lastTimeButtonDown = 0;
+  unsigned long time_clicked=0;
+  static bool isLongpress = false;
+  static bool isSettingpress = false;
   bool isEncoderButtonDown = rotaryEncoder.isEncoderButtonDown();
   //isEncoderButtonDown = !isEncoderButtonDown; //uncomment this line if your button is reversed
-  if (isEncoderButtonDown) {
-    Serial.print("+");  //REMOVE THIS LINE IF YOU DONT WANT TO SEE    
-    if (!wasButtonDown) {
-      //start measuring
+  if (isEncoderButtonDown)//
+  { //REMOVE THIS LINE IF YOU DONT WANT TO SEE    
+    if (!lastTimeButtonDown) {
+      //start measuring 
       lastTimeButtonDown = millis();
     }
-    //else we wait since button is still down
-    wasButtonDown = true;
-    return;
-  }
-  // button is up
-  if (wasButtonDown) {
-    //click happened, lets see if it was short click, long click or just too short
-    if(millis()-lastTimeButtonDown>= entersettingAfterMiliseconds && onsubmenu==false)
+    if(!isSettingpress && onsubmenu==false && (millis()-lastTimeButtonDown>= entersettingAfterMiliseconds) )
     {
+      Serial.print("Setting Press");
       setting=!setting;
+      isSettingpress = true;
     }
-    else if (millis() - lastTimeButtonDown >= longPressAfterMiliseconds) {
-      on_button_long_click();
-      shortpress=0;
-      onsubmenu=false;
-      // displayMenu();
+    else 
+    {
+      if(!isLongpress && (millis() - lastTimeButtonDown >= longPressAfterMiliseconds)) {
+        on_button_long_click();
+        isLongpress =true;
+        shortpress=0;
+        onsubmenu=false;
+      }
     }
-    else if (millis() - lastTimeButtonDown >= chagneModeAfterMiliseconds) {
-      on_button_changemode_click();
-      changemode++;
-      if(changemode>1){changemode=0;}
-
-    }
-     else if (millis() - lastTimeButtonDown >= shortPressAfterMiliseconds) {
+  }
+  else
+  {
+    if(lastTimeButtonDown && !isSettingpress && !isLongpress) {
       on_button_short_click();
       onsubmenu=true;
       shortpress=1;
+      int dem_double=0;
+      dem_double++;
+      changemode=!changemode;
+
     }
+    isLongpress = false;
+    isSettingpress = false;
+    lastTimeButtonDown = 0;
   }
-  wasButtonDown = false;
 }
 void time_setting()
 {
