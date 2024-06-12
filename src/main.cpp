@@ -18,6 +18,8 @@ const int SCREEN_WIDTH = 128;
 const int SCREEN_HEIGHT = 64;
 const int OLED_RESET = -1;
 
+hw_timer_t *timer0=NULL;
+
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(ENCODER_CLK, ENCODER_DT,ENCODER_SW);
@@ -34,7 +36,6 @@ int maxVisibleItems =4;
 int numMenus=6;
 bool rotatingDown;
 float nhietdo;
-int longpress;
 int shortpress;
 bool setting = false;
 unsigned long lastRotaryChange;
@@ -43,12 +44,16 @@ unsigned long shortPressAfterMiliseconds = 50;
 unsigned long longPressAfterMiliseconds = 2000;
 unsigned long entersettingAfterMiliseconds = 3000;
 unsigned long chagneModeAfterMiliseconds =1000;
+
+unsigned long previousMillis= 0;
+unsigned long interval =1000;
 int changemode=0;
 bool onsubmenu=false;
 int dem=0;
 int dem_region=0;
 int currentRotaryValue;
 int previousRotaryValue;
+int giay=0;
 String menus[] = {"Time Setting", "Region", "Calib", "Other", "Menu 5", "Menu 6"};
 void displayMenu();
 void maindisplay();
@@ -59,7 +64,25 @@ void on_button_long_click();
 void time_setting();
 void region();
 void calib();
-
+// void IRAM_ATTR timer0_ISR()
+// {
+//   giay++;
+//   Serial1.print(giay);
+//   if(giay>=60)
+//   {
+//     giay=0;
+//     phut++;
+//     if(phut>=60)
+//     {
+//       phut=0;
+//       gio++;
+//       if(gio>=24)
+//       {
+//         gio=0;
+//       }
+//     }
+//   }
+// }
 void IRAM_ATTR readEncoderISR() {
   rotaryEncoder.readEncoder_ISR();
 }
@@ -71,7 +94,10 @@ void setup() {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;);
   }
-
+  // timer0=timerBegin(0,80,true);
+  // timerAttachInterrupt(timer0,&timer0_ISR,true);
+  // timerAlarmWrite(timer0,409600,true);
+  // timerAlarmEnable(timer0);
   display.display();
   delay(2000);
   display.clearDisplay();
@@ -84,15 +110,33 @@ void setup() {
   Serial.println(ESP.getChipModel());
   Serial.print("Number of core: ");
   Serial.println(ESP.getChipCores());
-  Serial.print("Setup() is Running on Core: ");
-  Serial.println(xPortGetCoreID());
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-  Serial.print("loop() is Running on Core: ");
-  Serial.println(xPortGetCoreID());
   rotary_loop();
+  unsigned long currentMillis = millis();
+  if(currentMillis-previousMillis >=interval)
+  {
+    previousMillis=currentMillis;
+    giay++;
+    Serial.println(giay);
+    if(giay>=60)
+    {
+      giay=0;
+      phut++;
+      if(phut>=60)
+      {
+        phut=0;
+        gio++;
+        if(gio>=24)
+        {
+          gio=0;
+        }
+      }
+    }
+  }
+
   if(dem==0 && shortpress==1)
   {
     time_setting();
@@ -109,18 +153,15 @@ void loop() {
   {
     displayMenu();
   }
-  while(!setting )
+  if(!setting )
   {
     handle_rotary_button();
     maindisplay();
     onsubmenu=false;
-    longpress=0;
     shortpress=0;
     dem=0;
     
   }
-  Serial.print("Setting: ");
-  Serial.println(setting);
 }
 void displayMenu()
 {
@@ -159,13 +200,7 @@ void displayMenu()
     // dem_menu=menuIndex;
     display.setCursor(4, (i - startIndex) * 12 + 12);
     display.print(menus[i]);
-    Serial.print("Dem: ");
-    Serial.println(dem);
   }
-  Serial.print("Start Index: ");
-  Serial.println(startIndex);
-  Serial.print("End Index: ");
-  Serial.println(endIndex);
   display.display();
 }
 void maindisplay()
@@ -173,20 +208,22 @@ void maindisplay()
   display.clearDisplay();
   display.setTextColor(1);
   display.setTextSize(2);
-  display.setCursor(28, 29);
+  display.setCursor(19, 26);
   display.print(gio);
-  display.setTextSize(1);
-  display.setCursor(37, 6);
-  display.print("EoH IoT");
-  display.setTextSize(2);
-  display.setCursor(51, 28);
+  display.setCursor(39, 26);
   display.print(":");
-  display.setCursor(70, 28);
+  display.setCursor(57, 26);
   display.print(phut);
+  display.setCursor(76, 26);
+  display.print(":");
+  display.setCursor(93, 26);
+  display.print(giay);
+  display.setCursor(20, 4);
+  display.print("ERA-IOT");
   display.setTextSize(1);
-  display.setCursor(4, 51);
+  display.setCursor(5, 52);
   display.print("Region: ");
-  display.setCursor(51, 51);
+  display.setCursor(50, 52);
   display.print(utc);
   display.display();
 }
@@ -242,7 +279,7 @@ void rotary_loop()
         }
         
       }
-      if(dem==1)
+      if(dem==1)//Chinh Region
       {
         if(currentRotaryValue>previousRotaryValue)
         {
@@ -257,7 +294,7 @@ void rotary_loop()
           if(utc>12){utc=-12;}
         }
       }
-      if(dem==2)
+      if(dem==2)// Chỉnh Calib
       {
         if(currentRotaryValue>previousRotaryValue)
         {
@@ -274,27 +311,10 @@ void rotary_loop()
       }
     }
 
-  Serial.println(dem);
+  // Serial.println(dem);
   previousRotaryValue=currentRotaryValue;
 	}
   handle_rotary_button();
-}
-void on_button_short_click() {
-  Serial.print("button SHORT press ");
-  Serial.print(millis());
-  Serial.println(" milliseconds after restart");
-}
-
-void on_button_long_click() {
-  Serial.print("button LONG press ");
-  Serial.print(millis());
-  Serial.println(" milliseconds after restart");
-}
-void on_button_changemode_click()
-{
-  Serial.print("button_changemode_click");
-  Serial.print(millis());
-  Serial.println(" milliseconds after restart");
 }
 void handle_rotary_button() {
   static unsigned long lastTimeButtonDown = 0;
@@ -302,33 +322,41 @@ void handle_rotary_button() {
   static bool isLongpress = false;
   static bool isSettingpress = false;
   bool isEncoderButtonDown = rotaryEncoder.isEncoderButtonDown();
-  //isEncoderButtonDown = !isEncoderButtonDown; //uncomment this line if your button is reversed
   if (isEncoderButtonDown)//
-  { //REMOVE THIS LINE IF YOU DONT WANT TO SEE    
+  {    
     if (!lastTimeButtonDown) {
       //start measuring 
       lastTimeButtonDown = millis();
     }
-    if(!isSettingpress && onsubmenu==false && (millis()-lastTimeButtonDown>= entersettingAfterMiliseconds) )
+    if(!isLongpress && (millis() - lastTimeButtonDown >= longPressAfterMiliseconds)&& onsubmenu)
     {
-      Serial.print("Setting Press");
-      setting=!setting;
-      isSettingpress = true;
+      Serial.print("button LONG press ");
+      isLongpress =true;
+      shortpress=0;
+      display.clearDisplay();
+      display.setTextColor(1);
+      display.setTextSize(3);
+      display.setCursor(24, 18);
+      display.print("SAVED");
+      display.display();
+      delay(1000);
+      onsubmenu=false;
     }
     else 
     {
-      if(!isLongpress && (millis() - lastTimeButtonDown >= longPressAfterMiliseconds)) {
-        on_button_long_click();
-        isLongpress =true;
-        shortpress=0;
-        onsubmenu=false;
+      if(!isSettingpress && onsubmenu==false && (millis()-lastTimeButtonDown>= entersettingAfterMiliseconds))
+      {
+        Serial.print("Setting Press");
+        setting=!setting;
+        isSettingpress = true;
+        
       }
     }
   }
   else
   {
     if(lastTimeButtonDown && !isSettingpress && !isLongpress) {
-      on_button_short_click();
+      Serial.print("button SHORT press ");
       onsubmenu=true;
       shortpress=1;
       changemode=!changemode;
@@ -346,7 +374,6 @@ void time_setting()
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(30,0);
   display.print("Chinh Gio");
-  nhietdo=temperatureRead();
   display.setCursor(20,10);
   if(changemode==0)
   {
