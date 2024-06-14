@@ -12,7 +12,7 @@ Giữ để lưu và quay lại màn hình setting
 #define ENCODER_DT  26
 #define ENCODER_SW  27 
 #define ENCODER_VCC -1
-#define FLASH_MEMORY_SIZE 1
+#define FLASH_MEMORY_SIZE 100
 #define ENCODER_STEPS 4
 const int SCREEN_WIDTH = 128;
 const int SCREEN_HEIGHT = 64;
@@ -27,27 +27,31 @@ static const unsigned char PROGMEM image_hand_pointer_bits[] = {0x08,0x00,0x14,0
 0x14,0x00,0x16,0x00,0x15,0x80,0x15,0x60,0xd5,0x50,0x90,0x50,0x40,0x10,0x40,0x10,0x20,0x10,0x20,0x20,0x10,0x20,0x08,0x40};
 static const unsigned char PROGMEM image_arrow_left_bits[] = {0x20,0x40,0xfe,0x40,0x20};
 
+bool onsubmenu1=false;
 
-int x=0;
-int y=1;
-
+bool auto_time_mode = false;
+bool auto_region_mode = false;
+int reset_sel= 0;
+bool enable_reset= false;
 int gio=0;
-int add_gio=4;
+int add_gio=0;
 int phut;
-int add_phut=8;
+int add_phut=4;
 int giay;
-int add_giay=12;
+int add_giay=8;
 int utc;
 int add_utc=16;
 float offset;
 int add_offset=20;
+int add_auto_time = 28;
+int add_auto_region = 32;
 int startIndex;
 int endIndex;
 int maxVisibleItems =4;
 int numMenus=6;
 bool rotatingDown;
 float nhietdo;
-int shortpress;
+bool shortpress;
 bool setting = false;
 unsigned long lastRotaryChange;
 static unsigned long lastTimeButtonDown = 0;
@@ -65,12 +69,11 @@ unsigned int changemode_auto_region=0;
 bool onsubmenu=false;
 int dem=0;
 int dem_region=0;
-int dem_autotime;
-bool auto_time_mode;
-bool auto_region_mode;
+// bool dem_autotime;
+bool auto_time_sel;
 int currentRotaryValue;
 int previousRotaryValue;
-String menus[] = {"Set Time", "Region", "Calib", "Auto Time", "DHT", "Menu 6"};
+String menus[] = {"Set Time", "Region", "Calib", "Auto Time", "DHT", "Hard Reset"};
 void displayMenu();
 void maindisplay();
 void rotary_loop();
@@ -82,36 +85,30 @@ void region();
 void calib();
 void auto_time();
 void kiem_tra_nut_nhan();
-// void IRAM_ATTR timer0_ISR()// Timer Cho Đồng Hồ Offline
-// {
-//   giay++;
-//   Serial.println(giay);
-//   if(giay>=60)
-//   {
-//     giay=0;
-//     phut++;
-//     if(phut>=60)
-//     {
-//       phut=0;
-//       gio++;
-//       if(gio>=24)
-//       {
-//         gio=0;
-//       }
-//     }
-//   }
-// }
+void IRAM_ATTR timer0_ISR()// Timer Cho Đồng Hồ Offline
+{
+  giay++;
+  Serial.println(giay);
+  if(giay>=60)
+  {
+    giay=0;
+    phut++;
+    if(phut>=60)
+    {
+      phut=0;
+      gio++;
+      if(gio>=24)
+      {
+        gio=0;
+      }
+    }
+  }
+}
 void IRAM_ATTR readEncoderISR() {
   rotaryEncoder.readEncoder_ISR();
 }
 void setup() {
   // put your setup code here, to run once:
-  EEPROM.begin(FLASH_MEMORY_SIZE);
-  giay=EEPROM.read(add_giay);
-  phut=EEPROM.read(add_phut);
-  gio=EEPROM.read(add_gio);
-  utc=EEPROM.read(add_utc);
-  offset=EEPROM.read(add_offset);
   Serial.begin(115200);
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
@@ -119,10 +116,18 @@ void setup() {
   }
   display.display();
   delay(2000);
-  // timer0=timerBegin(0,80,true);
-  // timerAttachInterrupt(timer0,&timer0_ISR,true);
-  // timerAlarmWrite(timer0,1000000,true);
-  // timerAlarmEnable(timer0);
+  EEPROM.begin(FLASH_MEMORY_SIZE);
+  int giay=EEPROM.read(add_giay);
+  int phut=EEPROM.read(add_phut);
+  int gio=EEPROM.read(add_gio);
+  int utc=EEPROM.read(add_utc);
+  float offset=EEPROM.read(add_offset);
+  int auto_time_mode=EEPROM.read(add_auto_time);
+  int auto_region_mode=EEPROM.read(add_auto_region);
+  timer0=timerBegin(0,80,true);
+  timerAttachInterrupt(timer0,&timer0_ISR,true);
+  timerAlarmWrite(timer0,1000000,true);
+  timerAlarmEnable(timer0);
   display.clearDisplay();
   rotaryEncoder.begin();
   rotaryEncoder.setup(readEncoderISR);
@@ -138,40 +143,6 @@ void loop() {
   // put your main code here, to run repeatedly:
   rotary_loop();
   kiem_tra_nut_nhan();
-  unsigned long currentMillis = millis();
-  if(currentMillis-previousMillis >=interval)
-  {
-    previousMillis=currentMillis;
-    giay++;
-    EEPROM.writeInt(add_giay,giay);
-    EEPROM.commit();
-    // Serial.println(giay);
-    if(giay>=60)
-    {
-      giay=0;
-      phut++;
-      EEPROM.writeInt(add_phut,phut);
-      EEPROM.commit();
-      if(phut>=60)
-      {
-        phut=0;
-        gio++;
-        EEPROM.writeInt(add_gio,gio);
-        EEPROM.commit();
-        if(gio>=24)
-        {
-          gio=0;
-        }
-      }
-    }
-      // for(int i=4;i<=20;i=i+4)
-      // {
-      //   Serial.print("Giá Trị Tại Ô Nhớ Thứ ");
-      //   Serial.print(i);
-      //   Serial.print(": ");
-      //   Serial.println(EEPROM.read(i));
-      // }
-  }
 }
 void displayMenu()
 {
@@ -282,11 +253,11 @@ void rotary_loop()
           if(changemode==0)
           {
             gio++;
-            if(gio>24){gio=00;}
+            if(gio>24){gio=0;}
           }
           else{
             phut++;
-            if(phut>=60){phut=00;}
+            if(phut>=60){phut=0;}
           }
         }
         break;
@@ -321,16 +292,30 @@ void rotary_loop()
       case 3:
         if(currentRotaryValue>previousRotaryValue)
         {
-          rotatingDown=true;
-          
-          dem_autotime--;
+          if(auto_time_sel){
+            auto_time_mode=!auto_time_mode;
+          }else{
+            auto_region_mode=!auto_region_mode;
+          }
+        }else{
+          if(auto_time_sel){
+            auto_time_mode=!auto_time_mode;
+          }else{
+            auto_region_mode=!auto_region_mode;
+          }
         }
-        else
+        break;
+      case 5:
+        if(currentRotaryValue>previousRotaryValue)
         {
-          rotatingDown= false ;
-          dem_autotime++;
+          reset_sel++;
+          if(reset_sel>2){reset_sel=1;}
+        }else{
+          reset_sel--;
+          if(reset_sel<1){reset_sel=2;}
         }
-      
+        Serial.print(reset_sel);
+        break;
       default:
         break;
       }
@@ -355,8 +340,6 @@ void handle_rotary_button() {
     {
       Serial.print("button LONG press ");
       isLongpress =true;
-      shortpress=0;
-
       int x,y;
       for(x=0;x<20;x++)
       {
@@ -367,15 +350,19 @@ void handle_rotary_button() {
         display.print("SAVED");
         display.display();
       }
-      EEPROM.writeInt(add_giay,giay);
+      EEPROM.write(add_giay,giay);
       EEPROM.commit();
-      EEPROM.writeInt(add_gio,gio);
+      EEPROM.write(add_gio,gio);
       EEPROM.commit();
-      EEPROM.writeInt(add_phut,phut);
+      EEPROM.write(add_phut,phut);
       EEPROM.commit();
-      EEPROM.writeInt(add_utc,utc);
+      EEPROM.write(add_utc,utc);
       EEPROM.commit();
-      EEPROM.writeFloat(add_offset,offset);
+      EEPROM.write(add_offset,offset);
+      EEPROM.commit();
+      EEPROM.write(add_auto_time,auto_time_mode);
+      EEPROM.commit();
+      EEPROM.write(add_auto_region,auto_region_mode);
       EEPROM.commit();
       onsubmenu=false;
     }
@@ -386,7 +373,6 @@ void handle_rotary_button() {
         Serial.print("Setting Press");
         setting=!setting;
         isSettingpress = true;
-        
       }
     }
   }
@@ -395,14 +381,18 @@ void handle_rotary_button() {
     if(lastTimeButtonDown && !isSettingpress && !isLongpress && setting) {
       Serial.print("button SHORT press ");
       onsubmenu=true;
-      shortpress=1;
       changemode=!changemode;
-      if(dem_autotime==0){x=!x;}
-      if(dem_autotime==1){y=!y;}
+      auto_time_sel=!auto_time_sel;
 
-      
+      if(reset_sel==2&& dem == 5)
+      {
+        enable_reset = true;
+      }else if(reset_sel==1&& dem==5){
+        onsubmenu = false;
+        reset_sel=0;
+        displayMenu();
+      }
     }
-      shortpress=0;
       isLongpress = false;
       isSettingpress = false;
       lastTimeButtonDown = 0;
@@ -410,7 +400,7 @@ void handle_rotary_button() {
 }
 void time_setting()
 {
-  rotary_loop();
+  delay(50);
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
@@ -435,6 +425,7 @@ void time_setting()
   display.setCursor(80,20);
   display.print(phut);
   display.display();
+  onsubmenu1 =true;
 }
 void region()
 {
@@ -470,34 +461,53 @@ void calib()
 }
 void auto_time()
 {
-  // handle_rotary_button();
-  String mode[]={"ON","OFF"};
+  String mode[]={"OFF","ON"};
   String auto_time[]={"Auto Time: ","Auto Region: "};
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(13, 4);
   display.print("Auto Time Setting");
-  if(dem_autotime > 1){dem_autotime = 0;}
-  else if(dem_autotime < 0){dem_autotime = 1;}
+  display.setCursor(4,16);
+  display.print(auto_time[0]);
+  display.setCursor(4,28);
+  display.print(auto_time[1]);
   display.setCursor(64, 16);
-  display.print(mode[x]);
+  display.print(mode[auto_time_mode]);
   display.setCursor(93, 28);
-  display.print(mode[y]);
-  for (int i = 0; i <= 1; i++) {
-    if (i == dem_autotime) {
-      display.drawBitmap(116, i*12  + 18 , image_arrow_left_bits, 7, 5, 1);
-      // display.drawRoundRect(0, i * 12 + 10, 120, 12, 3, SSD1306_WHITE);
-    }
-    display.setCursor(4, i * 12 + 16);
-    display.print(auto_time[i]);
+  display.print(mode[auto_region_mode]);
+  if(auto_time_sel){
+    display.drawBitmap(116, 18 , image_arrow_left_bits, 7, 5, 1);
+  }else{
+    display.drawBitmap(116, 30, image_arrow_left_bits, 7, 5, 1);
   }
-  display.setCursor(64, 16);
-  display.print(mode[x]);
-  display.setCursor(93, 28);
-  display.print(mode[y]);
   display.display();
 }
+void hard_reset(){
+  String choose[]={"","No","Yes"};
+  display.clearDisplay();
+  display.setTextColor(1);
+  display.setCursor(16, 8);
+  display.print("Hard Resetting...");
+  display.setCursor(4, 28);
+  display.print("Are You Sure?");
+  display.setCursor(90, 28);
+  display.print(choose[reset_sel]);
+  if(enable_reset){
+    display.clearDisplay();
+    display.setTextColor(1);
+    display.setCursor(31, 23);
+    display.print("Resetting..");
+    display.display();
+    for(int i=0;i<FLASH_MEMORY_SIZE;i++)
+    {
+      EEPROM.write(i,0);
+    }
+    delay(2000);
+    ESP.restart();
+  }
+  display.display();
+  }
 void kiem_tra_nut_nhan()
 {
   if(setting)
@@ -518,9 +528,11 @@ void kiem_tra_nut_nhan()
         case 3:
           auto_time();
           break;
+        case 5:
+          hard_reset();
+          break;
         default:
           onsubmenu=false;
-          shortpress=false;
           break;
       }
     }
@@ -531,7 +543,6 @@ void kiem_tra_nut_nhan()
     handle_rotary_button();
     maindisplay();
     onsubmenu=false;
-    shortpress=0;
     dem=0; 
   }
 }
