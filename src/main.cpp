@@ -8,17 +8,20 @@ Giữ để lưu và quay lại màn hình setting
 #include <Adafruit_SSD1306.h>
 #include <AiEsp32RotaryEncoder.h>
 #include <EEPROM.h>
+// #include <Preferences.h> 
 #define ENCODER_CLK 25
 #define ENCODER_DT  26
 #define ENCODER_SW  27 
 #define ENCODER_VCC -1
-#define FLASH_MEMORY_SIZE 100
+#define FLASH_MEMORY_SIZE 200
 #define ENCODER_STEPS 4
 const int SCREEN_WIDTH = 128;
 const int SCREEN_HEIGHT = 64;
 const int OLED_RESET = -1;
 
 hw_timer_t *timer0=NULL;
+
+// Preferences pre;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
@@ -29,29 +32,28 @@ static const unsigned char PROGMEM image_arrow_left_bits[] = {0x20,0x40,0xfe,0x4
 
 bool onsubmenu1=false;
 
-bool auto_time_mode = false;
-bool auto_region_mode = false;
+
 int reset_sel= 0;
 bool enable_reset= false;
+bool auto_time_mode = false;
+bool auto_region_mode = false;
 int gio=0;
-int add_gio=0;
+const int add_gio=0;
 int phut;
-int add_phut=4;
+const int add_phut=32;
 int giay;
-int add_giay=8;
+const int add_giay=64;
 int utc;
-int add_utc=16;
-float offset;
-int add_offset=20;
-int add_auto_time = 28;
-int add_auto_region = 32;
+const int add_utc=96;
+float offset=0.00;
+const int add_offset=128;
+const int add_auto_time = 136;
+const int add_auto_region = 144;
 int startIndex;
 int endIndex;
 int maxVisibleItems =4;
 int numMenus=6;
 bool rotatingDown;
-float nhietdo;
-bool shortpress;
 bool setting = false;
 unsigned long lastRotaryChange;
 static unsigned long lastTimeButtonDown = 0;
@@ -59,7 +61,7 @@ unsigned long shortPressAfterMiliseconds = 50;
 unsigned long longPressAfterMiliseconds = 2000;
 unsigned long entersettingAfterMiliseconds = 3000;
 unsigned long chagneModeAfterMiliseconds =1000;
-
+unsigned long  currentMillis=millis();
 unsigned long previousMillis= 0;
 unsigned long interval =1000;
 unsigned int changemode=0;
@@ -88,28 +90,32 @@ void kiem_tra_nut_nhan();
 void IRAM_ATTR timer0_ISR()// Timer Cho Đồng Hồ Offline
 {
   giay++;
+  // EEPROM.writeInt(add_giay,giay);
   Serial.println(giay);
   if(giay>=60)
   {
     giay=0;
     phut++;
+    // EEPROM.writeInt(add_phut,phut);
     if(phut>=60)
     {
       phut=0;
       gio++;
+      // EEPROM.writeInt(add_gio,gio);
       if(gio>=24)
       {
         gio=0;
       }
     }
   }
+  // EEPROM.commit();
 }
 void IRAM_ATTR readEncoderISR() {
   rotaryEncoder.readEncoder_ISR();
 }
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(115200);
+  Serial.begin(115200);  int giay=EEPROM.read(add_giay);
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;);
@@ -117,13 +123,12 @@ void setup() {
   display.display();
   delay(2000);
   EEPROM.begin(FLASH_MEMORY_SIZE);
-  int giay=EEPROM.read(add_giay);
-  int phut=EEPROM.read(add_phut);
-  int gio=EEPROM.read(add_gio);
-  int utc=EEPROM.read(add_utc);
-  float offset=EEPROM.read(add_offset);
-  int auto_time_mode=EEPROM.read(add_auto_time);
-  int auto_region_mode=EEPROM.read(add_auto_region);
+  phut=EEPROM.read(add_phut);
+  gio=EEPROM.read(add_gio);
+  utc=EEPROM.read(add_utc);
+  offset=EEPROM.read(add_offset);
+  auto_time_mode=EEPROM.read(add_auto_time);
+  auto_region_mode=EEPROM.read(add_auto_region);
   timer0=timerBegin(0,80,true);
   timerAttachInterrupt(timer0,&timer0_ISR,true);
   timerAlarmWrite(timer0,1000000,true);
@@ -133,16 +138,35 @@ void setup() {
   rotaryEncoder.setup(readEncoderISR);
   rotaryEncoder.setBoundaries(-99999, 99999, true);
   rotaryEncoder.disableAcceleration();
-  Serial.print("Chip Model: ");
-  Serial.println(ESP.getChipModel());
-  Serial.print("Number of core: ");
-  Serial.println(ESP.getChipCores());
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
   rotary_loop();
   kiem_tra_nut_nhan();
+  // // currentMillis=millis();
+  // if(millis()-previousMillis >=1000)
+  // {
+  //   previousMillis=millis();
+  //   giay++;
+  //   // EEPROM.writeInt(add_giay,giay);
+  //   Serial.println(giay);
+  //   if(giay>=60)
+  //   {
+  //     giay=0;
+  //     phut++;
+  //     // EEPROM.writeInt(add_phut,phut);
+  //     if(phut>=60)
+  //     {
+  //       phut=0;
+  //       gio++;
+  //       // EEPROM.writeInt(add_gio,gio);
+  //       if(gio>=24)
+  //       {
+  //         gio=0;
+  //       }
+  //     }
+  //   }
+  // }
 }
 void displayMenu()
 {
@@ -350,19 +374,28 @@ void handle_rotary_button() {
         display.print("SAVED");
         display.display();
       }
-      EEPROM.write(add_giay,giay);
-      EEPROM.commit();
-      EEPROM.write(add_gio,gio);
-      EEPROM.commit();
-      EEPROM.write(add_phut,phut);
-      EEPROM.commit();
-      EEPROM.write(add_utc,utc);
-      EEPROM.commit();
-      EEPROM.write(add_offset,offset);
-      EEPROM.commit();
-      EEPROM.write(add_auto_time,auto_time_mode);
-      EEPROM.commit();
-      EEPROM.write(add_auto_region,auto_region_mode);
+      // pre.begin("myData",false);
+      // pre.putInt("gio",gio);
+      // pre.putInt("phut",phut);
+      // pre.putInt("giay",giay);
+      // pre.putInt("region",utc);
+      // pre.putFloat("offset",offset);
+      // pre.putBool("auto_time_mode",auto_time_mode);
+      // pre.putBool("auto_region_mode",auto_region_mode);
+      // pre.end();
+      EEPROM.writeInt(add_giay,giay);
+      // EEPROM.commit();
+      EEPROM.writeInt(add_gio,gio);
+      // EEPROM.commit();
+      EEPROM.writeInt(add_phut,phut);
+      // EEPROM.commit();
+      EEPROM.writeInt(add_utc,utc);
+      // EEPROM.commit();
+      EEPROM.writeFloat(add_offset,offset);
+      // EEPROM.commit();
+      EEPROM.writeBool(add_auto_time,auto_time_mode);
+      // EEPROM.commit();
+      EEPROM.writeBool(add_auto_region,auto_region_mode);
       EEPROM.commit();
       onsubmenu=false;
     }
@@ -502,6 +535,7 @@ void hard_reset(){
     for(int i=0;i<FLASH_MEMORY_SIZE;i++)
     {
       EEPROM.write(i,0);
+      EEPROM.commit();
     }
     delay(2000);
     ESP.restart();
