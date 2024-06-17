@@ -1,14 +1,15 @@
 /*
 Giữ Nút 3s để chuyển qua lại giữ màn hình setting và màn hình chính
-Nhấn để chọn các chế độ
-Giữ để lưu và quay lại màn hình setting
+Xoay Để thay đổi giá trị
+Nhấn để chuyển giữa các giá trị muốn thay đổi
+5p sẽ lưu thời gian,setting hiện tại vào eeprom
+Đã cmt eeprom do có hiện tượng tự reboot- Test lại 
 */
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <AiEsp32RotaryEncoder.h>
 #include <EEPROM.h>
-// #include <Preferences.h> 
 #define ENCODER_CLK 25
 #define ENCODER_DT  26
 #define ENCODER_SW  27 
@@ -19,20 +20,28 @@ const int SCREEN_WIDTH = 128;
 const int SCREEN_HEIGHT = 64;
 const int OLED_RESET = -1;
 
-hw_timer_t *timer0=NULL;
+// hw_timer_t *timer0=NULL;
 
-// Preferences pre;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(ENCODER_CLK, ENCODER_DT,ENCODER_SW);
 static const unsigned char PROGMEM image_hand_pointer_bits[] = {0x08,0x00,0x14,0x00,0x14,0x00,0x14,0x00,
 0x14,0x00,0x16,0x00,0x15,0x80,0x15,0x60,0xd5,0x50,0x90,0x50,0x40,0x10,0x40,0x10,0x20,0x10,0x20,0x20,0x10,0x20,0x08,0x40};
+
+static const unsigned char PROGMEM image_network_www_bits[] = {0x03,0xc0,0x0d,0xb0,0x32,0x4c,0x24,0x24,0x44,0x22,0x7f,0xfe,
+0x88,0x11,0x88,0x11,0x88,0x11,0x88,0x11,0x7f,0xfe,0x44,0x22,0x24,0x24,0x32,0x4c,0x0d,0xb0,0x03,0xc0};
+
+static const unsigned char PROGMEM image_wifi_not_connected_bits[] = {0x21,0xf0,0x00,0x16,0x0c,0x00,0x08,0x03,0x00,0x25,0xf0,
+0x80,0x42,0x0c,0x40,0x89,0x02,0x20,0x10,0xa1,0x00,0x23,0x58,0x80,0x04,0x24,0x00,0x08,0x52,0x00,0x01,
+0xa8,0x00,0x02,0x04,0x00,0x00,0x42,0x00,0x00,0xa1,0x00,0x00,0x40,0x80,0x00,0x00,0x00};
+
 static const unsigned char PROGMEM image_arrow_left_bits[] = {0x20,0x40,0xfe,0x40,0x20};
+
 
 bool onsubmenu1=false;
 
-
+int save=0;
 int reset_sel= 0;
 bool enable_reset= false;
 bool auto_time_mode = false;
@@ -71,7 +80,6 @@ unsigned int changemode_auto_region=0;
 bool onsubmenu=false;
 int dem=0;
 int dem_region=0;
-// bool dem_autotime;
 bool auto_time_sel;
 int currentRotaryValue;
 int previousRotaryValue;
@@ -87,35 +95,42 @@ void region();
 void calib();
 void auto_time();
 void kiem_tra_nut_nhan();
-void IRAM_ATTR timer0_ISR()// Timer Cho Đồng Hồ Offline
-{
-  giay++;
-  // EEPROM.writeInt(add_giay,giay);
-  Serial.println(giay);
-  if(giay>=60)
-  {
-    giay=0;
-    phut++;
-    // EEPROM.writeInt(add_phut,phut);
-    if(phut>=60)
-    {
-      phut=0;
-      gio++;
-      // EEPROM.writeInt(add_gio,gio);
-      if(gio>=24)
-      {
-        gio=0;
-      }
-    }
-  }
-  // EEPROM.commit();
-}
+// void IRAM_ATTR timer0_ISR()// Timer Cho Đồng Hồ Offline
+// {
+//   // if(millis()-previousMillis>=300000){
+//     // previousMillis=millis();
+//     // EEPROM.writeInt(add_giay,giay);
+//     // EEPROM.writeInt(add_gio,gio);
+//     // EEPROM.writeInt(add_phut,phut);
+//     // EEPROM.writeInt(add_utc,utc);
+//     // EEPROM.writeFloat(add_offset,offset);
+//     // EEPROM.writeBool(add_auto_time,auto_time_mode);
+//     // EEPROM.writeBool(add_auto_region,auto_region_mode);
+//     // EEPROM.commit();
+//   // }
+//   // giay++;
+//   // Serial.println(giay);
+//   // if(giay>=60)
+//   // {
+//   //   giay=0;
+//   //   phut++;
+//   //   if(phut>=60)
+//   //   {
+//   //     phut=0;
+//   //     gio++;
+//   //     if(gio>=24)
+//   //     {
+//   //       gio=0;
+//   //     }
+//   //   }
+//   // }
+// }
 void IRAM_ATTR readEncoderISR() {
   rotaryEncoder.readEncoder_ISR();
 }
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(115200);  int giay=EEPROM.read(add_giay);
+  Serial.begin(115200); 
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;);
@@ -129,44 +144,53 @@ void setup() {
   offset=EEPROM.read(add_offset);
   auto_time_mode=EEPROM.read(add_auto_time);
   auto_region_mode=EEPROM.read(add_auto_region);
-  timer0=timerBegin(0,80,true);
-  timerAttachInterrupt(timer0,&timer0_ISR,true);
-  timerAlarmWrite(timer0,1000000,true);
-  timerAlarmEnable(timer0);
+  // timer0=timerBegin(0,80,true);
+  // timerAttachInterrupt(timer0,&timer0_ISR,true);
+  // timerAlarmWrite(timer0,60000000,true);
+  // timerAlarmEnable(timer0);
   display.clearDisplay();
   rotaryEncoder.begin();
   rotaryEncoder.setup(readEncoderISR);
   rotaryEncoder.setBoundaries(-99999, 99999, true);
   rotaryEncoder.disableAcceleration();
 }
-
 void loop() {
   rotary_loop();
-  kiem_tra_nut_nhan();
-  // // currentMillis=millis();
-  // if(millis()-previousMillis >=1000)
-  // {
-  //   previousMillis=millis();
-  //   giay++;
-  //   // EEPROM.writeInt(add_giay,giay);
-  //   Serial.println(giay);
-  //   if(giay>=60)
-  //   {
-  //     giay=0;
-  //     phut++;
-  //     // EEPROM.writeInt(add_phut,phut);
-  //     if(phut>=60)
-  //     {
-  //       phut=0;
-  //       gio++;
-  //       // EEPROM.writeInt(add_gio,gio);
-  //       if(gio>=24)
-  //       {
-  //         gio=0;
-  //       }
-  //     }
-  //   }
-  // }
+  // kiem_tra_nut_nhan();
+  currentMillis=millis();
+  if(millis()-previousMillis >=1000)
+  {
+    previousMillis=millis();
+    save++;
+    giay++;
+    Serial.println(save);
+    if(save==300)
+    {
+      save=0;
+      EEPROM.writeInt(add_giay,giay);
+      EEPROM.writeInt(add_gio,gio);
+      EEPROM.writeInt(add_phut,phut);
+      EEPROM.writeInt(add_utc,utc);
+      EEPROM.writeFloat(add_offset,offset);
+      EEPROM.writeBool(add_auto_time,auto_time_mode);
+      EEPROM.writeBool(add_auto_region,auto_region_mode);
+      EEPROM.commit();
+    }
+    if(giay>=60)
+    {
+      giay=0;
+      phut++;
+      if(phut>=60)
+      {
+        phut=0;
+        gio++;
+        if(gio>=24)
+        {
+          gio=0;
+        }
+      }
+    }
+  }
 }
 void displayMenu()
 {
@@ -213,29 +237,37 @@ void maindisplay()
   display.clearDisplay();
   display.setTextColor(1);
   display.setTextSize(2);
-  if(gio>=10){display.setCursor(14, 26);}
-  else{display.setCursor(18, 26);}
+  display.setCursor(18, 5);
+  display.print("ERa-IoT");
+  display.drawBitmap(4, 44, image_network_www_bits, 16, 16, 1);
+  if(gio>=10){display.setCursor(11, 26);}else{
+    display.setCursor(16, 26);
+  }
   display.print(gio);
   display.setCursor(38, 26);
   display.print(":");
-  if(phut>=10){display.setCursor(50, 26);}
-  else{  display.setCursor(56, 26);}
+  if(phut>=10){display.setCursor(53, 26);}else{
+    display.setCursor(57, 26);
+  }
   display.print(phut);
-  display.setCursor(75, 26);
+  display.setCursor(76, 26);
   display.print(":");
-  display.setCursor(94, 26);
+  display.setCursor(92, 26);
   display.print(giay);
-  display.setCursor(20, 4);
-  display.print("ERA-IOT");
   display.setTextSize(1);
-  display.setCursor(5, 52);
-  display.print("Region: ");
-  display.setCursor(50, 52);
+  display.setCursor(23, 50);
+  display.print(":");
+  display.drawBitmap(104, 47, image_wifi_not_connected_bits, 19, 16, 1);
+  display.setCursor(29, 50);
+  display.print("UTC");
+  if(utc>0){display.setCursor(48, 50);display.print("+");}
+  display.setCursor(53, 50);
   display.print(utc);
   display.display();
 }
 void rotary_loop()
 {
+  kiem_tra_nut_nhan();
   if (rotaryEncoder.encoderChanged())
 	{
     currentRotaryValue = rotaryEncoder.readEncoder();
@@ -374,27 +406,12 @@ void handle_rotary_button() {
         display.print("SAVED");
         display.display();
       }
-      // pre.begin("myData",false);
-      // pre.putInt("gio",gio);
-      // pre.putInt("phut",phut);
-      // pre.putInt("giay",giay);
-      // pre.putInt("region",utc);
-      // pre.putFloat("offset",offset);
-      // pre.putBool("auto_time_mode",auto_time_mode);
-      // pre.putBool("auto_region_mode",auto_region_mode);
-      // pre.end();
       EEPROM.writeInt(add_giay,giay);
-      // EEPROM.commit();
       EEPROM.writeInt(add_gio,gio);
-      // EEPROM.commit();
       EEPROM.writeInt(add_phut,phut);
-      // EEPROM.commit();
       EEPROM.writeInt(add_utc,utc);
-      // EEPROM.commit();
       EEPROM.writeFloat(add_offset,offset);
-      // EEPROM.commit();
       EEPROM.writeBool(add_auto_time,auto_time_mode);
-      // EEPROM.commit();
       EEPROM.writeBool(add_auto_region,auto_region_mode);
       EEPROM.commit();
       onsubmenu=false;
