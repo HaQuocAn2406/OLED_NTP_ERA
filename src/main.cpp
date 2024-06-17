@@ -5,21 +5,35 @@ Nhấn để chuyển giữa các giá trị muốn thay đổi
 5p sẽ lưu thời gian,setting hiện tại vào eeprom
 Đã cmt eeprom do có hiện tượng tự reboot- Test lại 
 */
+#define ERA_LOCATION_VN
+#define ERA_AUTH_TOKEN "2a377e27-cf9a-4061-ba71-bdcedde02e64"
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <AiEsp32RotaryEncoder.h>
 #include <EEPROM.h>
+#include <ERa.hpp>
+#include <Time/ERaEspTime.hpp>
 #define ENCODER_CLK 25
 #define ENCODER_DT  26
 #define ENCODER_SW  27 
 #define ENCODER_VCC -1
 #define FLASH_MEMORY_SIZE 200
+#define ERA_DEBUG
+#define ERA_SERIAL Serial
 #define ENCODER_STEPS 4
+
+
 const int SCREEN_WIDTH = 128;
 const int SCREEN_HEIGHT = 64;
 const int OLED_RESET = -1;
 
+
+const char ssid[] = "eoh.io";
+const char pass[] = "Eoh@2020";
+
+ERaEspTime syncTime;
+TimeElement_t ntpTime;
 // hw_timer_t *timer0=NULL;
 
 
@@ -35,6 +49,9 @@ static const unsigned char PROGMEM image_network_www_bits[] = {0x03,0xc0,0x0d,0x
 static const unsigned char PROGMEM image_wifi_not_connected_bits[] = {0x21,0xf0,0x00,0x16,0x0c,0x00,0x08,0x03,0x00,0x25,0xf0,
 0x80,0x42,0x0c,0x40,0x89,0x02,0x20,0x10,0xa1,0x00,0x23,0x58,0x80,0x04,0x24,0x00,0x08,0x52,0x00,0x01,
 0xa8,0x00,0x02,0x04,0x00,0x00,0x42,0x00,0x00,0xa1,0x00,0x00,0x40,0x80,0x00,0x00,0x00};
+static const unsigned char PROGMEM image_wifi_1_bits[] = {0x01,0xf0,0x00,0x06,0x0c,0x00,0x18,0x03,0x00,0x21,0xf0,0x80,0x46,0x0c,
+0x40,0x88,0x02,0x20,0x10,0xe1,0x00,0x23,0x18,0x80,0x04,0x04,0x00,0x08,0x42,0x00,0x01,0xb0,0x00,0x02,0x08,0x00,0x00,0x40,0x00,0x00,
+0xa0,0x00,0x00,0x40,0x00,0x00,0x00,0x00};
 
 static const unsigned char PROGMEM image_arrow_left_bits[] = {0x20,0x40,0xfe,0x40,0x20};
 
@@ -52,7 +69,7 @@ int phut;
 const int add_phut=32;
 int giay;
 const int add_giay=64;
-int utc;
+int utc=7;
 const int add_utc=96;
 float offset=0.00;
 const int add_offset=128;
@@ -84,6 +101,15 @@ bool auto_time_sel;
 int currentRotaryValue;
 int previousRotaryValue;
 String menus[] = {"Set Time", "Region", "Calib", "Auto Time", "DHT", "Hard Reset"};
+float list[]={-12,-11,-10,-9.5,-9,-8,-7,-6,-5,-4,-3,-2.5,-2,-1,0,1,2,3,3.5,4,
+4.5,5,5.5,5.75,6,6.5,7,8,8.75,9,9.5,10,10.5,11,12,12.75,13,14};
+String region_list[]={"UTC-12","UTC-11","UTC-10","UTC-9:30","UTC-9","UTC-8","UTC-7","UTC-6","UTC-5",
+"UTC-4","UTC-3","UTC-2:30","UTC-2","UTC-1","UTC","UTC+1","UTC+2","UTC+3","UTC+3:30","UTC+4","UTC+4:30",
+"UTC+5","UTC+5:30","UTC+5:45","UTC+6","UTC+6:30","UTC+7","UTC+8","UTC+8:45","UTC+9","UTC+9:30","UTC+10",
+"UTC+10:30","UTC+11","UTC+12","UTC+12:45","UTC+13","UTC+14"};
+
+
+
 void displayMenu();
 void maindisplay();
 void rotary_loop();
@@ -94,46 +120,52 @@ void time_setting();
 void region();
 void calib();
 void auto_time();
+void DHT();
 void kiem_tra_nut_nhan();
-// void IRAM_ATTR timer0_ISR()// Timer Cho Đồng Hồ Offline
-// {
-//   // if(millis()-previousMillis>=300000){
-//     // previousMillis=millis();
-//     // EEPROM.writeInt(add_giay,giay);
-//     // EEPROM.writeInt(add_gio,gio);
-//     // EEPROM.writeInt(add_phut,phut);
-//     // EEPROM.writeInt(add_utc,utc);
-//     // EEPROM.writeFloat(add_offset,offset);
-//     // EEPROM.writeBool(add_auto_time,auto_time_mode);
-//     // EEPROM.writeBool(add_auto_region,auto_region_mode);
-//     // EEPROM.commit();
-//   // }
-//   // giay++;
-//   // Serial.println(giay);
-//   // if(giay>=60)
-//   // {
-//   //   giay=0;
-//   //   phut++;
-//   //   if(phut>=60)
-//   //   {
-//   //     phut=0;
-//   //     gio++;
-//   //     if(gio>=24)
-//   //     {
-//   //       gio=0;
-//   //     }
-//   //   }
-//   // }
-// }
 void IRAM_ATTR readEncoderISR() {
   rotaryEncoder.readEncoder_ISR();
 }
+
+ERA_CONNECTED() {
+  ERA_LOG("ERa", "ERa connected!");
+    Serial.println("ERa connected!");
+}
+
+ERA_DISCONNECTED() {
+    ERA_LOG("ERa", "ERa disconnected!");
+    Serial.println("ERa disconnected!");
+}
+
+void timerEvent() {
+    syncTime.getTime(ntpTime);
+    // Serial.println(ntpTime.second);
+    ERA_LOG(ERA_PSTR("NTP"), ERA_PSTR("%02d:%02d:%02dT%02d-%02d-%04dW%d"),
+                             ntpTime.hour, ntpTime.minute, ntpTime.second,
+                             ntpTime.day, ntpTime.month, ntpTime.year + 1970, ntpTime.wDay);
+    // Serial.print(ntpTime.hour);
+    // Serial.print(" Giờ ");
+    // Serial.print(ntpTime.minute);
+    // Serial.print(" Phút ");
+    // Serial.print(ntpTime.second);
+    // Serial.println(" Giây ");
+}
+void TaskEra(void * parameters){
+  ERa.begin(ssid, pass);
+  for(;;){
+    ERa.run();
+    syncTime.setTimeZone(list[utc]);
+    timerEvent();
+  }
+}
+
 void setup() {
   // put your setup code here, to run once:
+  SPIFFS.begin(true);
   Serial.begin(115200); 
+  syncTime.begin(); 
+  /////////////////////////////////////////////////////////
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
-    for(;;);
   }
   display.display();
   delay(2000);
@@ -144,26 +176,20 @@ void setup() {
   offset=EEPROM.read(add_offset);
   auto_time_mode=EEPROM.read(add_auto_time);
   auto_region_mode=EEPROM.read(add_auto_region);
-  // timer0=timerBegin(0,80,true);
-  // timerAttachInterrupt(timer0,&timer0_ISR,true);
-  // timerAlarmWrite(timer0,60000000,true);
-  // timerAlarmEnable(timer0);
   display.clearDisplay();
   rotaryEncoder.begin();
   rotaryEncoder.setup(readEncoderISR);
   rotaryEncoder.setBoundaries(-99999, 99999, true);
   rotaryEncoder.disableAcceleration();
+  xTaskCreatePinnedToCore(TaskEra,"Task Era NTP",100000,NULL,1,NULL,0);
 }
-void loop() {
+void loop() 
+{
   rotary_loop();
-  // kiem_tra_nut_nhan();
   currentMillis=millis();
   if(millis()-previousMillis >=1000)
   {
-    previousMillis=millis();
     save++;
-    giay++;
-    Serial.println(save);
     if(save==300)
     {
       save=0;
@@ -176,20 +202,44 @@ void loop() {
       EEPROM.writeBool(add_auto_region,auto_region_mode);
       EEPROM.commit();
     }
-    if(giay>=60)
-    {
-      giay=0;
-      phut++;
-      if(phut>=60)
+  }
+  if(auto_time_mode && WiFi.status() == WL_CONNECTED){
+    gio=ntpTime.hour;
+    phut=ntpTime.minute;
+    giay=ntpTime.second;
+  }
+  else
+  {
+      if(millis()-previousMillis >=1000)
       {
-        phut=0;
-        gio++;
-        if(gio>=24)
+        previousMillis=millis();
+        save++;
+        giay++;
+        // Serial.println(save);
+        if(save==300)
         {
-          gio=0;
+          save=0;
+          EEPROM.writeInt(add_giay,giay);
+          EEPROM.writeInt(add_gio,gio);
+          EEPROM.writeInt(add_phut,phut);
+          EEPROM.writeInt(add_utc,utc);
+          EEPROM.writeFloat(add_offset,offset);
+          EEPROM.writeBool(add_auto_time,auto_time_mode);
+          EEPROM.writeBool(add_auto_region,auto_region_mode);
+          EEPROM.commit();
+        }
+        if(giay>=60)
+        {
+          giay=0;
+          phut++;
+          if(phut>=60)
+          {
+            phut=0;
+            gio++;
+            if(gio>=24){gio=0;}
+          }
         }
       }
-    }
   }
 }
 void displayMenu()
@@ -200,8 +250,7 @@ void displayMenu()
   display.setCursor(20,0);
   display.print("Menu");
   display.setCursor(60,0);
-  display.print("utc: ");
-  display.print(utc);
+  display.print(region_list[utc]);
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(4,10);
@@ -240,6 +289,13 @@ void maindisplay()
   display.setCursor(18, 5);
   display.print("ERa-IoT");
   display.drawBitmap(4, 44, image_network_www_bits, 16, 16, 1);
+  if(WiFi.status() != WL_CONNECTED)
+  {
+    display.drawBitmap(104, 47, image_wifi_not_connected_bits, 19, 16, 1);
+  }else{
+    display.drawBitmap(104, 47, image_wifi_1_bits, 19, 16, 1);
+  }
+  
   if(gio>=10){display.setCursor(11, 26);}else{
     display.setCursor(16, 26);
   }
@@ -257,12 +313,11 @@ void maindisplay()
   display.setTextSize(1);
   display.setCursor(23, 50);
   display.print(":");
-  display.drawBitmap(104, 47, image_wifi_not_connected_bits, 19, 16, 1);
+  
   display.setCursor(29, 50);
-  display.print("UTC");
-  if(utc>0){display.setCursor(48, 50);display.print("+");}
-  display.setCursor(53, 50);
-  display.print(utc);
+  // display.print("UTC");
+  // display.setCursor(53, 50);
+  display.print(region_list[utc]);
   display.display();
 }
 void rotary_loop()
@@ -322,13 +377,13 @@ void rotary_loop()
         {
           rotatingDown=true;
           utc--;
-          if(utc<-12){utc=12;}
+          if(utc<0){utc=37;}
         }
         else
         {
           rotatingDown= false ;
           utc++;
-          if(utc>12){utc=-12;}
+          if(utc>37){utc=0;}
         }   
         break;
       case 2:
@@ -397,24 +452,32 @@ void handle_rotary_button() {
       Serial.print("button LONG press ");
       isLongpress =true;
       int x,y;
-      for(x=0;x<20;x++)
+      if(dem ==4)
       {
-        display.clearDisplay();
-        display.setTextColor(1);
-        display.setTextSize(3);
-        display.setCursor(24, 18);
-        display.print("SAVED");
-        display.display();
+        onsubmenu=false;
+        displayMenu();
       }
-      EEPROM.writeInt(add_giay,giay);
-      EEPROM.writeInt(add_gio,gio);
-      EEPROM.writeInt(add_phut,phut);
-      EEPROM.writeInt(add_utc,utc);
-      EEPROM.writeFloat(add_offset,offset);
-      EEPROM.writeBool(add_auto_time,auto_time_mode);
-      EEPROM.writeBool(add_auto_region,auto_region_mode);
-      EEPROM.commit();
-      onsubmenu=false;
+      else
+      {
+        for(x=0;x<20;x++)
+        {
+          display.clearDisplay();
+          display.setTextColor(1);
+          display.setTextSize(3);
+          display.setCursor(24, 18);
+          display.print("SAVED");
+          display.display();
+        }
+        EEPROM.writeInt(add_giay,giay);
+        EEPROM.writeInt(add_gio,gio);
+        EEPROM.writeInt(add_phut,phut);
+        EEPROM.writeInt(add_utc,utc);
+        EEPROM.writeFloat(add_offset,offset);
+        EEPROM.writeBool(add_auto_time,auto_time_mode);
+        EEPROM.writeBool(add_auto_region,auto_region_mode);
+        EEPROM.commit();
+        onsubmenu=false;
+      }
     }
     else 
     {
@@ -490,7 +553,7 @@ void region()
   display.setTextSize(1);
   display.print("UTC: ");
   display.setCursor(60,20);
-  display.print(utc);
+  display.print(region_list[utc]);
   display.display();
 }
 void calib()
@@ -559,6 +622,27 @@ void hard_reset(){
   }
   display.display();
   }
+void DHT()
+{
+    float nhietdo;
+    static const unsigned char PROGMEM image_weather_temperature_bits[] = {0x1c,0x00,0x22,0x02,0x2b,0x05,0x2a,0x02,0x2b,0x38,0x2a,
+    0x60,0x2b,0x40,0x2a,0x40,0x2a,0x60,0x49,0x38,0x9c,0x80,0xae,0x80,0xbe,0x80,0x9c,0x80,0x41,0x00,0x3e,0x00};
+    display.clearDisplay();
+    display.setTextColor(1);
+    display.setTextSize(1);
+    display.setCursor(21, 15);
+    display.print("Chip Temperature");
+    display.setTextSize(2);
+    display.setCursor(36, 34);
+    for(int i=0;i<100;i++)
+    {
+      nhietdo=nhietdo+temperatureRead();
+    }
+    nhietdo=nhietdo/100;
+    display.print(nhietdo);
+    display.drawBitmap(2, 11, image_weather_temperature_bits, 16, 16, 1);
+    display.display();
+}
 void kiem_tra_nut_nhan()
 {
   if(setting)
@@ -568,7 +652,20 @@ void kiem_tra_nut_nhan()
       switch (dem)
       {
         case 0:
-          time_setting();
+          if(auto_time_mode){
+            display.clearDisplay();
+            display.setTextColor(1);
+            display.setCursor(17, 14);
+            display.print("AuTo Time Is ON");
+            display.setCursor(6, 33);
+            display.print("Turn OFF To Use This");
+            display.display();
+            delay(2000);
+            displayMenu();
+            onsubmenu=false;
+          }else{
+            time_setting();
+          }
           break;
         case 1:
           region();
@@ -578,6 +675,9 @@ void kiem_tra_nut_nhan()
           break;
         case 3:
           auto_time();
+          break;
+        case 4:
+          DHT();
           break;
         case 5:
           hard_reset();
