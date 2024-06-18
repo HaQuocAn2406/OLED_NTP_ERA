@@ -14,6 +14,8 @@ Nhấn để chuyển giữa các giá trị muốn thay đổi
 #include <EEPROM.h>
 #include <ERa.hpp>
 #include <Time/ERaEspTime.hpp>
+#include <WiFiManager.h> 
+#include <string.h>
 #define ENCODER_CLK 25
 #define ENCODER_DT  26
 #define ENCODER_SW  27 
@@ -29,8 +31,8 @@ const int SCREEN_HEIGHT = 64;
 const int OLED_RESET = -1;
 
 
-const char ssid[] = "eoh.io";
-const char pass[] = "Eoh@2020";
+// const char ssid[] = "eoh.io";
+// const char pass[] = "Eoh@2020";
 
 ERaEspTime syncTime;
 TimeElement_t ntpTime;
@@ -150,12 +152,38 @@ void timerEvent() {
     // Serial.println(" Giây ");
 }
 void TaskEra(void * parameters){
-  ERa.begin(ssid, pass);
+// const char ssid[] = "eoh.io";
+// const char pass[] = "Eoh@2020";
+
   for(;;){
-    ERa.run();
-    syncTime.setTimeZone(list[utc]);
-    timerEvent();
-  }
+    while(WiFi.status() != WL_CONNECTED)
+    {
+      WiFiManager wm;
+      String ssid = wm.getWiFiSSID();
+      String pass = wm.getWiFiPass();
+      int a;
+      for (a = 0; ssid[a] != '\0'; ++a);
+      for(int i=0;i<a;i++){
+        char b ;
+        b += ssid[i];
+      }
+      bool res;
+      res = wm.autoConnect("AutoConnectAP","password"); // password protected ap
+      if(!res) {
+          Serial.println("Failed to connect");
+      } 
+      else {
+          Serial.println("connected...yeey :)");
+          // ERa.begin(ssid, pass);
+
+      }      
+    }
+      ERa.run();
+      syncTime.setTimeZone(list[utc]);
+      timerEvent();
+    }
+
+
 }
 
 void setup() {
@@ -163,6 +191,7 @@ void setup() {
   SPIFFS.begin(true);
   Serial.begin(115200); 
   syncTime.begin(); 
+    // wm.resetSettings();
   /////////////////////////////////////////////////////////
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
@@ -181,7 +210,7 @@ void setup() {
   rotaryEncoder.setup(readEncoderISR);
   rotaryEncoder.setBoundaries(-99999, 99999, true);
   rotaryEncoder.disableAcceleration();
-  xTaskCreatePinnedToCore(TaskEra,"Task Era NTP",100000,NULL,1,NULL,0);
+  xTaskCreatePinnedToCore(TaskEra,"Task Era NTP",100000,NULL,1,NULL,1);
 }
 void loop() 
 {
