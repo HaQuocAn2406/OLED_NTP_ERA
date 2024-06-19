@@ -16,6 +16,7 @@ Nhấn để chuyển giữa các giá trị muốn thay đổi
 #include <Time/ERaEspTime.hpp>
 #include <WiFiManager.h> 
 #include <string.h>
+// #include"hienthi.h"
 #define ENCODER_CLK 25
 #define ENCODER_DT  26
 #define ENCODER_SW  27 
@@ -31,13 +32,9 @@ const int SCREEN_HEIGHT = 64;
 const int OLED_RESET = -1;
 
 
-// const char ssid[] = "eoh.io";
-// const char pass[] = "Eoh@2020";
 
 ERaEspTime syncTime;
 TimeElement_t ntpTime;
-// hw_timer_t *timer0=NULL;
-
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
@@ -54,35 +51,42 @@ static const unsigned char PROGMEM image_wifi_not_connected_bits[] = {0x21,0xf0,
 static const unsigned char PROGMEM image_wifi_1_bits[] = {0x01,0xf0,0x00,0x06,0x0c,0x00,0x18,0x03,0x00,0x21,0xf0,0x80,0x46,0x0c,
 0x40,0x88,0x02,0x20,0x10,0xe1,0x00,0x23,0x18,0x80,0x04,0x04,0x00,0x08,0x42,0x00,0x01,0xb0,0x00,0x02,0x08,0x00,0x00,0x40,0x00,0x00,
 0xa0,0x00,0x00,0x40,0x00,0x00,0x00,0x00};
-
 static const unsigned char PROGMEM image_arrow_left_bits[] = {0x20,0x40,0xfe,0x40,0x20};
 
+static const unsigned char PROGMEM cham_thang [] = {0xc0,0xc0,0xc0,0xc0,0xc0,0xc0,0xc0,0xc0,0x00,0x00,0x00,0xc0,0xc0};
 
-bool onsubmenu1=false;
 
-int save=0;
-int reset_sel= 0;
+
 bool enable_reset= false;
 bool auto_time_mode = false;
 bool auto_region_mode = false;
+bool onsubmenu=false;
+bool rotatingDown;
+bool setting = false;
+bool CONNECTED=false;
+int save=0;
+int reset_sel= 0;
 int gio=0;
-const int add_gio=0;
 int phut;
-const int add_phut=32;
 int giay;
-const int add_giay=64;
 int utc=7;
+int startIndex;
+int endIndex;
+int maxVisibleItems =4;
+int numMenus=7;
+int dem=0;
+int dem_region=0;
+bool auto_time_sel;
+int currentRotaryValue;
+int previousRotaryValue;
+const int add_gio=0;
+const int add_phut=32;
+const int add_giay=64;
 const int add_utc=96;
 float offset=0.00;
 const int add_offset=128;
 const int add_auto_time = 136;
 const int add_auto_region = 144;
-int startIndex;
-int endIndex;
-int maxVisibleItems =4;
-int numMenus=6;
-bool rotatingDown;
-bool setting = false;
 unsigned long lastRotaryChange;
 static unsigned long lastTimeButtonDown = 0;
 unsigned long shortPressAfterMiliseconds = 50;   
@@ -92,17 +96,10 @@ unsigned long chagneModeAfterMiliseconds =1000;
 unsigned long  currentMillis=millis();
 unsigned long previousMillis= 0;
 unsigned long interval =1000;
-unsigned int changemode=0;
-unsigned int changemode_auto_time=0;
-unsigned int changemode_auto_region=0;
-
-bool onsubmenu=false;
-int dem=0;
-int dem_region=0;
-bool auto_time_sel;
-int currentRotaryValue;
-int previousRotaryValue;
-String menus[] = {"Set Time", "Region", "Calib", "Auto Time", "DHT", "Hard Reset"};
+static unsigned int changemode=0;
+static unsigned int changemode_auto_time=0;
+static unsigned int changemode_auto_region=0;
+String menus[] = {"Set Time", "Region", "Calib", "Auto Time", "DHT", "Hard Reset","WiFi"};
 float list[]={-12,-11,-10,-9.5,-9,-8,-7,-6,-5,-4,-3,-2.5,-2,-1,0,1,2,3,3.5,4,
 4.5,5,5.5,5.75,6,6.5,7,8,8.75,9,9.5,10,10.5,11,12,12.75,13,14};
 String region_list[]={"UTC-12","UTC-11","UTC-10","UTC-9:30","UTC-9","UTC-8","UTC-7","UTC-6","UTC-5",
@@ -122,7 +119,9 @@ void time_setting();
 void region();
 void calib();
 void auto_time();
+void hard_reset();
 void DHT();
+void wifi();
 void kiem_tra_nut_nhan();
 void IRAM_ATTR readEncoderISR() {
   rotaryEncoder.readEncoder_ISR();
@@ -130,7 +129,8 @@ void IRAM_ATTR readEncoderISR() {
 
 ERA_CONNECTED() {
   ERA_LOG("ERa", "ERa connected!");
-    Serial.println("ERa connected!");
+  Serial.println("ERa connected!");
+  CONNECTED =true;
 }
 
 ERA_DISCONNECTED() {
@@ -138,52 +138,39 @@ ERA_DISCONNECTED() {
     Serial.println("ERa disconnected!");
 }
 
-void timerEvent() {
-    syncTime.getTime(ntpTime);
-    // Serial.println(ntpTime.second);
-    ERA_LOG(ERA_PSTR("NTP"), ERA_PSTR("%02d:%02d:%02dT%02d-%02d-%04dW%d"),
-                             ntpTime.hour, ntpTime.minute, ntpTime.second,
-                             ntpTime.day, ntpTime.month, ntpTime.year + 1970, ntpTime.wDay);
-    // Serial.print(ntpTime.hour);
-    // Serial.print(" Giờ ");
-    // Serial.print(ntpTime.minute);
-    // Serial.print(" Phút ");
-    // Serial.print(ntpTime.second);
-    // Serial.println(" Giây ");
-}
 void TaskEra(void * parameters){
-// const char ssid[] = "eoh.io";
-// const char pass[] = "Eoh@2020";
-
   for(;;){
     while(WiFi.status() != WL_CONNECTED)
     {
       WiFiManager wm;
-      String ssid = wm.getWiFiSSID();
-      String pass = wm.getWiFiPass();
-      int a;
-      for (a = 0; ssid[a] != '\0'; ++a);
-      for(int i=0;i<a;i++){
-        char b ;
-        b += ssid[i];
-      }
+      // wm.resetSettings();
       bool res;
-      res = wm.autoConnect("AutoConnectAP","password"); // password protected ap
+      res = wm.autoConnect("WiFi_ESP32",""); // password protected ap
       if(!res) {
           Serial.println("Failed to connect");
       } 
-      else {
-          Serial.println("connected...yeey :)");
-          // ERa.begin(ssid, pass);
-
+      else 
+      {
+          // Serial.println("connected...yeey :)");
+          String id = wm.getWiFiSSID();
+          String pas = wm.getWiFiPass();
+          char *ssid;
+          char *pass;
+          ssid=&id[0];
+          pass=&pas[0];
+          ERa.begin(ssid, pass);
       }      
     }
       ERa.run();
       syncTime.setTimeZone(list[utc]);
-      timerEvent();
+      syncTime.getTime(ntpTime);
+      // Serial.print(ntpTime.hour);
+      // Serial.print(" Giờ ");
+      // Serial.print(ntpTime.minute);
+      // Serial.print(" Phút ");
+      // Serial.print(ntpTime.second);
+      // Serial.println(" Giây ");
     }
-
-
 }
 
 void setup() {
@@ -191,7 +178,6 @@ void setup() {
   SPIFFS.begin(true);
   Serial.begin(115200); 
   syncTime.begin(); 
-    // wm.resetSettings();
   /////////////////////////////////////////////////////////
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
@@ -232,7 +218,7 @@ void loop()
       EEPROM.commit();
     }
   }
-  if(auto_time_mode && WiFi.status() == WL_CONNECTED){
+  if(auto_time_mode && CONNECTED ){
     gio=ntpTime.hour;
     phut=ntpTime.minute;
     giay=ntpTime.second;
@@ -322,6 +308,10 @@ void maindisplay()
   {
     display.drawBitmap(104, 47, image_wifi_not_connected_bits, 19, 16, 1);
   }else{
+    if(!CONNECTED)
+    {
+      display.drawBitmap(100, 49, cham_thang , 2, 13, 1);
+    }
     display.drawBitmap(104, 47, image_wifi_1_bits, 19, 16, 1);
   }
   
@@ -342,10 +332,7 @@ void maindisplay()
   display.setTextSize(1);
   display.setCursor(23, 50);
   display.print(":");
-  
   display.setCursor(29, 50);
-  // display.print("UTC");
-  // display.setCursor(53, 50);
   display.print(region_list[utc]);
   display.display();
 }
@@ -362,13 +349,13 @@ void rotary_loop()
       {
         rotatingDown=true;
         dem++;
-        if(dem>5){dem=0;}
+        if(dem>6){dem=0;}
       }
       else
       {
         rotatingDown= false ;
         dem--;
-        if(dem<0){dem=5;}
+        if(dem<0){dem=6;}
       }
     }
     else
@@ -567,7 +554,6 @@ void time_setting()
   display.setCursor(80,20);
   display.print(phut);
   display.display();
-  onsubmenu1 =true;
 }
 void region()
 {
@@ -646,6 +632,8 @@ void hard_reset(){
       EEPROM.write(i,0);
       EEPROM.commit();
     }
+    WiFiManager wm;
+    wm.resetSettings();
     delay(2000);
     ESP.restart();
   }
@@ -670,6 +658,14 @@ void DHT()
     nhietdo=nhietdo/100;
     display.print(nhietdo);
     display.drawBitmap(2, 11, image_weather_temperature_bits, 16, 16, 1);
+    display.display();
+}
+void wifi()
+{
+    display.clearDisplay();
+    display.setTextColor(1);
+    display.setTextSize(1);
+    
     display.display();
 }
 void kiem_tra_nut_nhan()
@@ -710,6 +706,9 @@ void kiem_tra_nut_nhan()
           break;
         case 5:
           hard_reset();
+          break;
+        case 6:
+          wifi();
           break;
         default:
           onsubmenu=false;
