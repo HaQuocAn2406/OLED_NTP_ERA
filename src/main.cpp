@@ -128,6 +128,7 @@ const int add_offset=128;
 const int add_auto_time = 136;
 const int add_auto_region = 144;
 unsigned long lastRotaryChange;
+long preRSSI=0;
 static unsigned long lastTimeButtonDown = 0;
 unsigned long shortPressAfterMiliseconds = 50;   
 unsigned long longPressAfterMiliseconds = 2000;
@@ -139,6 +140,7 @@ unsigned long interval =1000;
 static unsigned int changemode=0;
 static unsigned int changemode_auto_time=0;
 static unsigned int changemode_auto_region=0;
+String rssi;
 char SSID_AP[]={"ERa-Clock"};
 String menus[] = {"Time","WiFi","Region", "Calib", "Auto Time", "DHT", "Hard Reset"};
 float list[]={-12,-11,-10,-9.5,-9,-8,-7,-6,-5,-4,-3,-2.5,-2,-1,0,1,2,3,3.5,4,
@@ -233,12 +235,12 @@ void setup() {
   display.display();
   delay(2000);
   EEPROM.begin(FLASH_MEMORY_SIZE);
-  phut=EEPROM.read(add_phut);
-  gio=EEPROM.read(add_gio);
-  utc=EEPROM.read(add_utc);
-  offset=EEPROM.read(add_offset);
-  auto_time_mode=EEPROM.read(add_auto_time);
-  auto_region_mode=EEPROM.read(add_auto_region);
+  // phut=EEPROM.read(add_phut);
+  // gio=EEPROM.read(add_gio);
+  // utc=EEPROM.read(add_utc);
+  // offset=EEPROM.read(add_offset);
+  // auto_time_mode=EEPROM.read(add_auto_time);
+  // auto_region_mode=EEPROM.read(add_auto_region);
   display.clearDisplay();
   rotaryEncoder.begin();
   rotaryEncoder.setup(readEncoderISR);
@@ -258,14 +260,14 @@ void loop()
     if(save==300)
     {
       save=0;
-      EEPROM.writeInt(add_giay,giay);
-      EEPROM.writeInt(add_gio,gio);
-      EEPROM.writeInt(add_phut,phut);
-      EEPROM.writeInt(add_utc,utc);
-      EEPROM.writeFloat(add_offset,offset);
-      EEPROM.writeBool(add_auto_time,auto_time_mode);
-      EEPROM.writeBool(add_auto_region,auto_region_mode);
-      EEPROM.commit();
+      // EEPROM.writeInt(add_giay,giay);
+      // EEPROM.writeInt(add_gio,gio);
+      // EEPROM.writeInt(add_phut,phut);
+      // EEPROM.writeInt(add_utc,utc);
+      // EEPROM.writeFloat(add_offset,offset);
+      // EEPROM.writeBool(add_auto_time,auto_time_mode);
+      // EEPROM.writeBool(add_auto_region,auto_region_mode);
+      // EEPROM.commit();
     }
   }
   if(auto_time_mode && CONNECTED ){
@@ -629,9 +631,9 @@ void handle_rotary_button() {
               display.print("SAVED");
               display.display();
             }
-            EEPROM.writeInt(add_giay,giay);
-            EEPROM.writeInt(add_gio,gio);
-            EEPROM.writeBool(add_auto_time,auto_time_mode);
+            // EEPROM.writeInt(add_giay,giay);
+            // EEPROM.writeInt(add_gio,gio);
+            // EEPROM.writeBool(add_auto_time,auto_time_mode);
             // EEPROM.commit();
             time_setting();
             break;
@@ -728,7 +730,7 @@ void time_setting()
     set_time();
     return;
   }
-  String time_menu[]={"Set Time","Sync Time: ","Save","Back"};
+  String time_menu[]={"Set Time","Sync Time: ","Region:","Save","Back"};
   String mode[]={"OFF","ON"};
   display.clearDisplay();
   display.setTextColor(1);
@@ -858,24 +860,26 @@ String ConverIpToString(IPAddress ip) {
 }
 
 String RSSIasQuality(){
-  int res=WiFi.RSSI();
-  Serial.println(res);
+  int res;
   String rssi;
-  if(res >= -30){
-    rssi="Amazing";
-  }else if(res >= -55 && res < -30 ){
-    rssi="Very Good";
-  }else if(res >= -67 && res < -55){
-    rssi="Fairly Good";
-  }else if(res >= -70 && res < -67){
-    rssi="Ok";
-  }else if(res >= -80 && res < -70){
-    rssi="Low";
-  }else if(res > -90 && res < -80){
-    rssi="Very Low";
-  }else{
-    rssi ="No Signal";
-  }
+    preRSSI=millis();
+    res=WiFi.RSSI();
+    Serial.println(res);
+    if(res >= -30){
+      rssi="Amazing";
+    }else if(res >= -55 && res < -30 ){
+      rssi="Very Good";
+    }else if(res >= -67 && res < -55){
+      rssi="Fairly Good";
+    }else if(res >= -70 && res < -67){
+      rssi="Ok";
+    }else if(res >= -80 && res < -70){
+      rssi="Low";
+    }else if(res > -90 && res < -80){
+      rssi="Very Low";
+    }else{
+      rssi ="No Signal";
+    }
   return rssi;
 }
 void wifi()
@@ -896,7 +900,9 @@ void wifi()
   IPAddress ip;
   ip=WiFi.localIP();
   String mac;
-  String rssi = RSSIasQuality();
+  if(millis()- preRSSI>=5000){
+    rssi = RSSIasQuality();
+  }
   mac=WiFi.macAddress();
   const char* wifi_menu[]={"SSID: ","IP:","MAC:","RSSI: ","Disconnect","Back"};
   String infor[]={wm.getWiFiSSID(),ConverIpToString(ip),mac,rssi};
@@ -924,14 +930,14 @@ void wifi()
   } 
   else if (endWifiIndex >= 6) 
   {
-      endWifiIndex = 6 - 1;
-      startWifiIndex = endWifiIndex - (4 - 1);
+      endWifiIndex =5;
+      startWifiIndex = endWifiIndex - 3;
   }
   for(int i=startWifiIndex ; i <= endWifiIndex ;i++){
     if(i== wifiMenu_choose){
-      display.drawLine(0,(i-startWifiIndex)*12+20,120,(i-startWifiIndex)*12+20,SH110X_WHITE);
+      display.drawRoundRect(0,(i-startWifiIndex)*12+10,128,12,3,SH110X_WHITE);
     }
-    display.setCursor(0, (i-startWifiIndex)*12+12);
+    display.setCursor(2, (i-startWifiIndex)*12+12);
     display.print(wifi_menu[i]);
     if(i>3){
       continue;
