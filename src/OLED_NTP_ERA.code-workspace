@@ -1,0 +1,21 @@
+{
+	"folders": [
+		{
+			"name": "OLED_NTP_ERA",
+			"path": ".."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"maindisplay.h": "c",
+			"adafruit_gfx.h": "c",
+			"adafruit_ssd1306.h": "c",
+			"displaymenu.h": "c",
+			"wifimanager.h": "c",
+			"hienthi.h": "c",
+			"ostream": "cpp",
+			"*.tpp": "cpp",
+			"string_view": "cpp"
+		}
+	}
+}
