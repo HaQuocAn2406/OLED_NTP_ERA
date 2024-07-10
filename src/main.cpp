@@ -15,8 +15,7 @@ Nhấn để chuyển giữa các giá trị muốn thay đổi
 #include <Time/ERaEspTime.hpp>
 #include <WiFiManager.h> 
 #include <string.h>
-#include<iostream>
-#include <qrcode.h>
+#include "DHTesp.h"
 #define ENCODER_CLK 25
 #define ENCODER_DT  26
 #define ENCODER_SW  27 
@@ -25,14 +24,15 @@ Nhấn để chuyển giữa các giá trị muốn thay đổi
 #define ERA_DEBUG
 #define ERA_SERIAL Serial
 #define ENCODER_STEPS 4
-
+#define DHTPIN 4
+// #define DHTTYPE DHT11
 
 const int SCREEN_WIDTH = 128;
 const int SCREEN_HEIGHT = 64;
 const int OLED_RESET = -1;
 
 WiFiManager wm;
-
+DHTesp dht;
 ERaEspTime syncTime;
 TimeElement_t ntpTime;
 
@@ -60,7 +60,7 @@ static const unsigned char PROGMEM image_wifi_1_bits[] = {0x01,0xf0,0x00,0x06,0x
 0xa0,0x00,0x00,0x40,0x00,0x00,0x00,0x00};
 static const unsigned char PROGMEM image_arrow_left_bits[] = {0x20,0x40,0xfe,0x40,0x20};
 
-static const unsigned char PROGMEM cham_thang [] = {0xc0,0xc0,0xc0,0xc0,0xc0,0xc0,0xc0,0xc0,0x00,0x00,0x00,0xc0,0xc0};
+static const unsigned char PROGMEM cham_thang [] = {0xc0,0xc0,0xc0,0xc0,0xc0,0xc0,0xc0,0xc0,0xc0,0xc0,0x00,0xc0,0xc0};
 static const unsigned char PROGMEM image_qr_1_bits[] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
@@ -124,6 +124,8 @@ int count_click=0;
 float offset=0.00;
 float _offset;
 float nhietdo;
+int humidity;
+int temperature;
 const int add_gio=0;
 const int add_phut=32;
 const int add_giay=64;
@@ -146,7 +148,7 @@ static unsigned int changemode_auto_time=0;
 static unsigned int changemode_auto_region=0;
 String rssi;
 char SSID_AP[]={"ERa-Clock"};
-String menus[] = {"Time","WiFi", "Calib","DHT","Hard Reset"};
+String menus[] = {"Time","WiFi", "Calib","Chip Temperature","Hard Reset"};
 float list[]={-12,-11,-10,-9.5,-9,-8,-7,-6,-5,-4,-3,-2.5,-2,-1,0,1,2,3,3.5,4,
 4.5,5,5.5,5.75,6,6.5,7,8,8.75,9,9.5,10,10.5,11,12,12.75,13,14};
 String region_list[]={"UTC-12","UTC-11","UTC-10","UTC-9:30","UTC-9","UTC-8","UTC-7","UTC-6","UTC-5",
@@ -185,11 +187,12 @@ ERA_CONNECTED() {
 ERA_DISCONNECTED() {
     ERA_LOG("ERa", "ERa disconnected!");
     Serial.println("ERa disconnected!");
+    CONNECTED=false;
 }
 
 void TaskEra(void * parameters){
   for(;;){
-    if(WiFi.status() != WL_CONNECTED)
+    while(WiFi.status() != WL_CONNECTED)
     {
       // wm.resetSettings();
       wm.setTitle("ERa-WiFi Config");
@@ -234,6 +237,7 @@ void setup() {
   // SPIFFS.begin(true);
   Serial.begin(115200); 
   syncTime.begin(); 
+  dht.setup(4, DHTesp::DHT11);
   /////////////////////////////////////////////////////////
   display.begin(i2c_Address, true); // Address 0x3C default
   display.display();
@@ -251,53 +255,59 @@ void setup() {
   rotaryEncoder.setBoundaries(-99999, 99999, true);
   rotaryEncoder.disableAcceleration();
   xTaskCreatePinnedToCore(TaskEra,"Task Era NTP",100000,NULL,1,NULL,1);
+  // dht11.setDelay(200);
 }
 void loop() 
 {
   rotary_loop();
   hienthi();
-  currentMillis=millis();
+    // if(millis()-previousMillis >=1000)
+  // {
+    
+  //   save++;
+  //   if(save==300)
+  //   {
+  //     save=0;
+  //     // EEPROM.writeInt(add_giay,giay);
+  //     // EEPROM.writeInt(add_gio,gio);
+  //     // EEPROM.writeInt(add_phut,phut);
+  //     // EEPROM.writeInt(add_utc,utc);
+  //     // EEPROM.writeFloat(add_offset,offset);
+  //     // EEPROM.writeBool(add_auto_time,auto_time_mode);
+  //     // EEPROM.writeBool(add_auto_region,auto_region_mode);
+  //     // EEPROM.commit();
+  //   }
+  // }
   if(millis()-previousMillis >=1000)
   {
+    previousMillis=millis();
+    humidity = dht.getHumidity();
+    temperature = dht.getTemperature();
     nhietdo=temperatureRead();
     save++;
-    if(save==300)
-    {
+    if(save==300){
       save=0;
-      // EEPROM.writeInt(add_giay,giay);
-      // EEPROM.writeInt(add_gio,gio);
-      // EEPROM.writeInt(add_phut,phut);
-      // EEPROM.writeInt(add_utc,utc);
-      // EEPROM.writeFloat(add_offset,offset);
-      // EEPROM.writeBool(add_auto_time,auto_time_mode);
-      // EEPROM.writeBool(add_auto_region,auto_region_mode);
-      // EEPROM.commit();
+          // EEPROM.writeInt(add_giay,giay);
+          // EEPROM.writeInt(add_gio,gio);
+          // EEPROM.writeInt(add_phut,phut);
+          // EEPROM.writeInt(add_utc,utc);
+          // EEPROM.writeFloat(add_offset,offset);
+          // EEPROM.writeBool(add_auto_time,auto_time_mode);
+          // EEPROM.writeBool(add_auto_region,auto_region_mode);
+          // EEPROM.commit();
     }
-  }
-  if(auto_time_mode && CONNECTED ){
-    gio=ntpTime.hour;
-    phut=ntpTime.minute;
-    giay=ntpTime.second;
-  }
-  else
-
-  {
-      if(millis()-previousMillis >=1000)
+    giay++;
+    if(giay>=60)
+    {
+      giay=0;
+      phut++;
+      if(phut>=60)
       {
-        previousMillis=millis();
-        giay++;
-        if(giay>=60)
-        {
-          giay=0;
-          phut++;
-          if(phut>=60)
-          {
-            phut=0;
-            gio++;
-            if(gio>=24){gio=0;}
-          }
-        }
+        phut=0;
+        gio++;
+        if(gio>=24){gio=0;}
       }
+    }
   }
 }
 void displayMenu()
@@ -342,42 +352,74 @@ void displayMenu()
 void maindisplay()
 {
   display.clearDisplay();
-  display.setTextColor(1);
-  display.setTextSize(2);
-  display.setCursor(18, 5);
-  display.print("ERa-IoT");
-  display.drawBitmap(4, 44, image_network_www_bits, 16, 16, 1);
+  static const unsigned char PROGMEM image_weather_humidity_white_bits[] = {0x04,0x00,0x04,0x00,0x0c,0x00,0x0a,0x00,0x12,0x00,0x11,0x00,0x20,0x80,0x20,0x80,0x41,0x40,0x40,0xc0,0x80,0xa0,0x80,0x20,0x40,0x40,0x40,0x40,0x30,0x80,0x0f,0x00};
+  static const unsigned char PROGMEM image_weather_temperature_bits[] = {0x1c,0x00,0x22,0x02,0x2b,0x05,0x2a,0x02,0x2b,0x38,0x2a,0x60,0x2b,0x40,0x2a,0x40,0x2a,0x60,0x49,0x38,0x9c,0x80,0xae,0x80,0xbe,0x80,0x9c,0x80,0x41,0x00,0x3e,0x00};
+  static const unsigned char PROGMEM image_wifi_full_bits[] = {0x01,0xf0,0x00,0x07,0xfc,0x00,0x1e,0x0f,0x00,0x39,0xf3,0x80,0x77,0xfd,0xc0,0xef,0x1e,0xe0,0x5c,0xe7,0x40,0x3b,0xfb,0x80,0x17,0x1d,0x00,0x0e,0xee,0x00,0x05,0xf4,0x00,0x03,0xb8,0x00,0x01,0x50,0x00,0x00,0xe0,0x00,0x00,0x40,0x00,0x00,0x00,0x00};
   if(WiFi.status() != WL_CONNECTED)
   {
-    display.drawBitmap(104, 47, image_wifi_not_connected_bits, 19, 16, 1);
+    display.drawBitmap(109, 47, image_wifi_not_connected_bits, 19, 16, 1);
   }else{
     if(!CONNECTED)
     {
-      display.drawBitmap(100, 49, cham_thang , 2, 13, 1);
+      display.drawBitmap(105, 47, cham_thang , 2, 13, 1);
     }
-    display.drawBitmap(104, 47, image_wifi_1_bits, 19, 16, 1);
+    display.drawBitmap(109, 47, image_wifi_full_bits, 19, 16, 1);
   }
-  
-  if(gio>=10){display.setCursor(11, 26);}else{
-    display.setCursor(16, 26);
-  }
+  display.drawLine(0, 45, 127, 45, 1);
+  display.setTextColor(1);
+  display.setCursor(2, 51);
+  display.print("Wed");
+  display.setCursor(44, 51);
+  display.print("Jul");
+  display.setCursor(26, 51);
+  display.print("10");
+  display.setCursor(67, 51);
+  display.print("2024");
+  display.drawBitmap(83, 2, image_weather_humidity_white_bits, 11, 16, 1);
+  display.drawBitmap(2, 2, image_weather_temperature_bits, 16, 16, 1);
+  display.setCursor(24, 26);
   display.print(gio);
-  display.setCursor(38, 26);
+  display.setCursor(41, 26);
   display.print(":");
-  if(phut>=10){display.setCursor(53, 26);}else{
-    display.setCursor(57, 26);
-  }
+  display.setCursor(53, 26);
   display.print(phut);
-  display.setCursor(76, 26);
+  display.setCursor(72, 26);
   display.print(":");
-  display.setCursor(92, 26);
+  display.setCursor(85, 26);
   display.print(giay);
-  display.setTextSize(1);
-  display.setCursor(23, 50);
-  display.print(":");
-  display.setCursor(29, 50);
-  display.print(region_list[utc]);
+  display.setCursor(97, 8);
+  display.print(humidity);
+  display.setCursor(19, 8);
+  display.print(temperature);
+  // display.setTextColor(1);
+  // display.setTextSize(2);
+  // display.setCursor(18, 5);
+  // display.print("ERa-IoT");
+  // display.drawBitmap(4, 44, image_network_www_bits, 16, 16, 1);
+
+  // if(gio>=10){display.setCursor(11, 26);}else{
+  //   display.setCursor(16, 26);
+  // }
+  // display.print(gio);
+  // display.setCursor(38, 26);
+  // display.print(":");
+  // if(phut>=10){display.setCursor(53, 26);}else{
+  //   display.setCursor(57, 26);
+  // }
+  // display.print(phut);
+  // display.setCursor(76, 26);
+  // display.print(":");
+  // display.setCursor(92, 26);
+  // display.print(giay);
+  // display.setTextSize(1);
+  // display.setCursor(23, 50);
+  // display.print(":");
+  // display.setCursor(29, 50);
+  // display.print(region_list[utc]);
   display.display();
+}
+void calendar(){
+
 }
 void rotary_loop()
 {
@@ -584,10 +626,10 @@ void handle_rotary_button() {
       // _phut=phut;
       // _utc=utc;
       // _offset=offset;
-      time_clicked=millis();
+      // time_clicked=millis();
       Serial.print("button SHORT press ");
       onsubmenu=true;
-      if(dem==0 && ontime_setting==true){// control ubmenu 1
+      if(dem==0 && ontime_setting==true){// control submenu 1
         switch (time_menuIndex)
         {
           case 0:
@@ -635,21 +677,25 @@ void handle_rotary_button() {
         reset_sel=0;
         displayMenu();
       }
-      if(wifiMenu_choose==4 && dem==1 && CONNECTED==true){
+      if(wifiMenu_choose==4 && dem==1 ){
         display.clearDisplay();
         display.setTextColor(1);
         display.setCursor(16, 13);
         display.print("Disconnecting");
         display.display();
         display.setCursor(95, 13);
-        for(int i;i<5;i++){
+        for(int i=0;i<5;i++){
           display.print(".");
           display.display();
           delay(300);
         }
-        wm.resetSettings();
+        WiFi.disconnect();
+        wm.erase();
         CONNECTED=false;
+        // wm.resetSettings();
+        Serial.println(wm.getWLStatusString());
         wifi();
+        return;
       }else if(wifiMenu_choose==5 && dem==1 && CONNECTED==true){
         onsubmenu=false;
         wifiMenu_choose=-1;
@@ -667,7 +713,10 @@ void set_time(){
   display.setTextColor(SH110X_WHITE);
   display.setCursor(30,0);
   display.print("Set Time");
-  if(auto_time_mode){
+  if(auto_time_mode==true && CONNECTED==true){
+    gio=ntpTime.hour;
+    phut=ntpTime.minute;
+    giay=ntpTime.second;
     display.clearDisplay();
     display.setTextColor(1);
     display.setCursor(17, 14);
@@ -882,6 +931,7 @@ String RSSIasQuality(){
 void wifi()
 { 
   if(CONNECTED==false){
+    wm.autoConnect(SSID_AP,"");
     display.clearDisplay();
     display.setTextColor(1);
     display.setCursor(4, 3);
