@@ -6,6 +6,8 @@ Nhấn để chuyển giữa các giá trị muốn thay đổi
 */
 #define ERA_LOCATION_VN
 #define ERA_AUTH_TOKEN "2a377e27-cf9a-4061-ba71-bdcedde02e64"
+#define ERA_DEBUG
+#define ERA_SERIAL Serial
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
@@ -16,6 +18,7 @@ Nhấn để chuyển giữa các giá trị muốn thay đổi
 #include <WiFiManager.h> 
 #include <string.h>
 #include "DHTesp.h"
+#include<time.h>
 #define ENCODER_CLK 25
 #define ENCODER_DT  26
 #define ENCODER_SW  27 
@@ -93,7 +96,7 @@ bool auto_region_mode = false;
 bool onsubmenu=false;
 bool rotatingDown;
 bool setting = false;
-bool CONNECTED=false;
+bool ERa_CONNECTED = false;
 bool auto_time_sel;
 bool nothing_changed=true;
 bool onsubmenu1=false;
@@ -104,16 +107,21 @@ int startWifiIndex, endWifiIndex;
 int startTimeIndex,endTimeIndex;
 int save=0;
 int reset_sel= 0;
+int offset_utc;
+int hours;
+int _hours;
+int minutes ;
+int seconds;
 int _gio,_phut;
-int gio=0;
+int gio;
 int phut;
 int giay;
-int utc=26;
+int utc=19;
 int _utc;
 int startIndex;
 int endIndex;
 int maxVisibleItems =4;
-int numMenus=5;
+int numMenus=6;
 int dem=0;
 int dem_region=0;
 int time_menuIndex=0;
@@ -136,7 +144,8 @@ const int add_auto_region = 144;
 unsigned long lastRotaryChange;
 long preRSSI=0;
 static unsigned long lastTimeButtonDown = 0;
-unsigned long shortPressAfterMiliseconds = 50;   
+unsigned long shortPressAfterMiliseconds = 50;  
+unsigned long local_time; 
 unsigned long longPressAfterMiliseconds = 2000;
 unsigned long entersettingAfterMiliseconds = 3000;
 unsigned long chagneModeAfterMiliseconds =1000;
@@ -146,15 +155,20 @@ unsigned long interval =1000;
 static unsigned int changemode=0;
 static unsigned int changemode_auto_time=0;
 static unsigned int changemode_auto_region=0;
+unsigned long current_time;
 String rssi;
 char SSID_AP[]={"ERa-Clock"};
-String menus[] = {"Time","WiFi", "Calib","Chip Temperature","Hard Reset"};
-float list[]={-12,-11,-10,-9.5,-9,-8,-7,-6,-5,-4,-3,-2.5,-2,-1,0,1,2,3,3.5,4,
-4.5,5,5.5,5.75,6,6.5,7,8,8.75,9,9.5,10,10.5,11,12,12.75,13,14};
-String region_list[]={"UTC-12","UTC-11","UTC-10","UTC-9:30","UTC-9","UTC-8","UTC-7","UTC-6","UTC-5",
-"UTC-4","UTC-3","UTC-2:30","UTC-2","UTC-1","UTC","UTC+1","UTC+2","UTC+3","UTC+3:30","UTC+4","UTC+4:30",
-"UTC+5","UTC+5:30","UTC+5:45","UTC+6","UTC+6:30","UTC+7","UTC+8","UTC+8:45","UTC+9","UTC+9:30","UTC+10",
-"UTC+10:30","UTC+11","UTC+12","UTC+12:45","UTC+13","UTC+14"};
+String menus[] = {"Time","WiFi", "Calib","Chip Temperature","Hard Reset","Back"};
+// float list[]={-12,-11,-10,-9.5,-9,-8,-7,-6,-5,-4,-3,-2.5,-2,-1,0,1,2,3,3.5,4,
+// 4.5,5,5.5,5.75,6,6.5,7,8,8.75,9,9.5,10,10.5,11,12,12.75,13,14};
+int list[]={-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14};
+// String region_list[]={"UTC-12","UTC-11","UTC-10","UTC-9:30","UTC-9","UTC-8","UTC-7","UTC-6","UTC-5",
+// "UTC-4","UTC-3","UTC-2:30","UTC-2","UTC-1","UTC","UTC+1","UTC+2","UTC+3","UTC+3:30","UTC+4","UTC+4:30",
+// "UTC+5","UTC+5:30","UTC+5:45","UTC+6","UTC+6:30","UTC+7","UTC+8","UTC+8:45","UTC+9","UTC+9:30","UTC+10",
+// "UTC+10:30","UTC+11","UTC+12","UTC+12:45","UTC+13","UTC+14"};
+String region_list[]={"UTC-12","UTC-11","UTC-10","UTC-9","UTC-8","UTC-7","UTC-6","UTC-5",
+"UTC-4","UTC-3","UTC-2","UTC-1","UTC","UTC+1","UTC+2","UTC+3","UTC+4",
+"UTC+5","UTC+6","UTC+7","UTC+8","UTC+9","UTC+10","UTC+11","UTC+12","UTC+13","UTC+14"};
 
 void displayMenu();
 void maindisplay();
@@ -166,13 +180,12 @@ void time_setting();
 void set_time();
 void region();
 void calib();
-// void auto_time();
 void hard_reset();
 void DHT();
 void wifi();
 void hienthi();
 void connect_succes();
-// String RSSIasQuality();
+void time_calculate(unsigned long current_time);
 void IRAM_ATTR readEncoderISR() {
   rotaryEncoder.readEncoder_ISR();
 }
@@ -180,22 +193,24 @@ void IRAM_ATTR readEncoderISR() {
 ERA_CONNECTED() {
   ERA_LOG("ERa", "ERa connected!");
   Serial.println("ERa connected!");
-  CONNECTED =true;
+  ERa_CONNECTED = true;
   // connect_succes();
 }
 
 ERA_DISCONNECTED() {
     ERA_LOG("ERa", "ERa disconnected!");
     Serial.println("ERa disconnected!");
-    CONNECTED=false;
+    ERa_CONNECTED =false;
 }
 
 void TaskEra(void * parameters){
+  wm.setTitle("ERa-WiFi Config");
   for(;;){
     while(WiFi.status() != WL_CONNECTED)
     {
       // wm.resetSettings();
-      wm.setTitle("ERa-WiFi Config");
+      // ERa.switchToConfig();
+      // ERa.setSpecSSID("ERA-Clock_v1","");
       bool res;
       res = wm.autoConnect(SSID_AP,""); // password protected ap
       if(!res) {
@@ -209,7 +224,8 @@ void TaskEra(void * parameters){
           char *pass;
           ssid=&_ssid[0];
           pass=&_pass[0];
-          ERa.begin(ssid, pass);
+          // ERa.setScanWiFi(true);
+          ERa.begin(ssid,pass);
           Serial.print("Trạng Thái Kết Nối: ");
           Serial.println(wm.getWLStatusString());
       }
@@ -219,6 +235,12 @@ void TaskEra(void * parameters){
       syncTime.getTime(ntpTime);
     }
 }
+// void DHT_Task(void * parameters){
+//   for(;;){
+//     vTaskDelay(2000);
+
+//   }
+// }
 // void connect_succes(){
 //   display.clearDisplay();
 //   display.setTextColor(SH110X_WHITE);
@@ -236,8 +258,8 @@ void setup() {
   // put your setup code here, to run once:
   // SPIFFS.begin(true);
   Serial.begin(115200); 
-  syncTime.begin(); 
-  dht.setup(4, DHTesp::DHT11);
+  syncTime.begin();
+    dht.setup(4, DHTesp::DHT11);
   /////////////////////////////////////////////////////////
   display.begin(i2c_Address, true); // Address 0x3C default
   display.display();
@@ -255,12 +277,20 @@ void setup() {
   rotaryEncoder.setBoundaries(-99999, 99999, true);
   rotaryEncoder.disableAcceleration();
   xTaskCreatePinnedToCore(TaskEra,"Task Era NTP",100000,NULL,1,NULL,1);
-  // dht11.setDelay(200);
+  // xTaskCreatePinnedToCore(DHT_Task,"Task DHT",1000,NULL,1,NULL,1);
 }
 void loop() 
 {
   rotary_loop();
   hienthi();
+  if(dht.getStatusString()== "OK"){
+    temperature = dht.getTemperature();
+    humidity=dht.getHumidity();
+  }else{
+    Serial.println(dht.getStatusString());
+    temperature=0;
+    humidity=0;
+  }
     // if(millis()-previousMillis >=1000)
   // {
     
@@ -278,37 +308,75 @@ void loop()
   //     // EEPROM.commit();
   //   }
   // }
-  if(millis()-previousMillis >=1000)
-  {
-    previousMillis=millis();
-    humidity = dht.getHumidity();
-    temperature = dht.getTemperature();
-    nhietdo=temperatureRead();
-    save++;
-    if(save==300){
-      save=0;
-          // EEPROM.writeInt(add_giay,giay);
-          // EEPROM.writeInt(add_gio,gio);
-          // EEPROM.writeInt(add_phut,phut);
-          // EEPROM.writeInt(add_utc,utc);
-          // EEPROM.writeFloat(add_offset,offset);
-          // EEPROM.writeBool(add_auto_time,auto_time_mode);
-          // EEPROM.writeBool(add_auto_region,auto_region_mode);
-          // EEPROM.commit();
-    }
-    giay++;
-    if(giay>=60)
-    {
-      giay=0;
-      phut++;
-      if(phut>=60)
-      {
-        phut=0;
-        gio++;
-        if(gio>=24){gio=0;}
-      }
-    }
+  if(ERa_CONNECTED==true && auto_time_mode==true){
+    gio=ntpTime.hour;
+    phut=ntpTime.minute;
+    giay=ntpTime.second;
   }
+  else{
+      time_calculate(current_time);
+    // if(millis()-previousMillis >=1000){
+    //   if(_utc!=utc){
+    //     _utc=utc;
+    //     gio +=list[utc];
+    //   }
+    //   previousMillis=millis();
+    //   nhietdo=temperatureRead();
+    //   save++;
+    //   if(save==300){
+    //     save=0;
+    //         // EEPROM.writeInt(add_giay,giay);
+    //         // EEPROM.writeInt(add_gio,gio);
+    //         // EEPROM.writeInt(add_phut,phut);
+    //         // EEPROM.writeInt(add_utc,utc);
+    //         // EEPROM.writeFloat(add_offset,offset);
+    //         // EEPROM.writeBool(add_auto_time,auto_time_mode);
+    //         // EEPROM.writeBool(add_auto_region,auto_region_mode);
+    //         // EEPROM.commit();
+    //   }
+    //   giay++;
+    //   if(giay>=60)
+    //   {
+    //     giay=0;
+    //     phut++;
+    //     if(phut>=60)
+    //     {
+    //       phut=0;
+    //       gio++;
+    //       if(gio>=24){gio=0;}
+    //     }
+    //   }
+    // }
+  }
+}
+void time_calculate(unsigned long current_time ){
+    unsigned long utc_time = current_time+millis()/1000;
+    // Your main loop code (if any)
+    // unsigned long utc_time = 61140+millis()/1000;
+
+    // Determine the time zone offset (in seconds)
+    int moscow_offset = list[utc] * 3600; //
+
+    // Calculate local time
+    unsigned long local_time = utc_time + moscow_offset;
+
+    // Extract hours, minutes, and seconds
+    hours = (local_time / 3600) % 24;
+
+    minutes = (local_time / 60) % 60;
+    seconds = local_time % 60;
+    // Print local time
+    Serial.print("Local time in VietNam: ");
+    Serial.print(hours);
+    Serial.print(":");
+    if (minutes < 10) Serial.print("0"); // Add leading zero if needed
+    Serial.print(minutes);
+    Serial.print(":");
+    if (seconds < 10) Serial.print("0"); // Add leading zero if needed
+    Serial.println(seconds);
+    // gio=hours;
+    // phut=minutes;
+    // giay=seconds;
 }
 void displayMenu()
 {
@@ -359,7 +427,7 @@ void maindisplay()
   {
     display.drawBitmap(109, 47, image_wifi_not_connected_bits, 19, 16, 1);
   }else{
-    if(!CONNECTED)
+    if(!ERa_CONNECTED)
     {
       display.drawBitmap(105, 47, cham_thang , 2, 13, 1);
     }
@@ -378,15 +446,15 @@ void maindisplay()
   display.drawBitmap(83, 2, image_weather_humidity_white_bits, 11, 16, 1);
   display.drawBitmap(2, 2, image_weather_temperature_bits, 16, 16, 1);
   display.setCursor(24, 26);
-  display.print(gio);
+  display.print(hours);
   display.setCursor(41, 26);
   display.print(":");
   display.setCursor(53, 26);
-  display.print(phut);
+  display.print(minutes);
   display.setCursor(72, 26);
   display.print(":");
   display.setCursor(85, 26);
-  display.print(giay);
+  display.print(seconds);
   display.setCursor(97, 8);
   display.print(humidity);
   display.setCursor(19, 8);
@@ -433,13 +501,13 @@ void rotary_loop()
       {
         rotatingDown=true;
         dem++;
-        if(dem>4){dem=0;}
+        if(dem>5){dem=0;}
       }
       else
       {
         rotatingDown= false ;
         dem--;
-        if(dem<0){dem=4;}
+        if(dem<0){dem=5;}
       }
     }
     else
@@ -461,7 +529,7 @@ void rotary_loop()
               }
             }else if(onsubmenu1a==true){
               utc--;
-              if(utc<0){utc=37;}
+              if(utc<0){utc=26;}
             }else{
               rotatingDown=true;
               time_menuIndex++;
@@ -482,7 +550,7 @@ void rotary_loop()
               }
             }else if(onsubmenu1a==true){
               utc++;
-              if(utc>37){utc=0;}
+              if(utc>26){utc=0;}
             }else{
               rotatingDown=false;
               time_menuIndex--;
@@ -561,7 +629,7 @@ void handle_rotary_button() {
     }
     if(!isLongpress && (millis() - lastTimeButtonDown >= longPressAfterMiliseconds)&& onsubmenu)// đè 2s để lưu setting
     {
-      Serial.print("button LONG press ");
+      Serial.println("button LONG press ");
       isLongpress =true;
       if(onsubmenu1==true){
         onsubmenu1=false;
@@ -575,7 +643,7 @@ void handle_rotary_button() {
         time_setting();
         return;
       }
-      if(dem==1 && CONNECTED==false){
+      if(dem==1 && ERa_CONNECTED==false){
         onsubmenu=false;
         displayMenu();
         return;
@@ -613,7 +681,7 @@ void handle_rotary_button() {
     {
       if(!isSettingpress && onsubmenu==false && (millis()-lastTimeButtonDown>= entersettingAfterMiliseconds))
       {
-        Serial.print("Setting Press");
+        Serial.println("Setting Press");
         setting=!setting;
         isSettingpress = true;
       }
@@ -626,8 +694,8 @@ void handle_rotary_button() {
       // _phut=phut;
       // _utc=utc;
       // _offset=offset;
-      // time_clicked=millis();
-      Serial.print("button SHORT press ");
+      // time_clicked=millis(); 
+      Serial.println("button SHORT press ");
       onsubmenu=true;
       if(dem==0 && ontime_setting==true){// control submenu 1
         switch (time_menuIndex)
@@ -656,6 +724,7 @@ void handle_rotary_button() {
             // EEPROM.writeInt(add_gio,gio);
             // EEPROM.writeBool(add_auto_time,auto_time_mode);
             // EEPROM.commit();
+            current_time=(gio*3600+phut*60)-(list[utc]*3600);
             time_setting();
             break;
           case 4:
@@ -690,16 +759,22 @@ void handle_rotary_button() {
           delay(300);
         }
         WiFi.disconnect();
+        // ERa.switchToConfig(true);
         wm.erase();
-        CONNECTED=false;
-        // wm.resetSettings();
-        Serial.println(wm.getWLStatusString());
+        // ERa_CONNECTED=false;
+        wm.resetSettings();
+        // Serial.println(wm.getWLStatusString());
         wifi();
-        return;
-      }else if(wifiMenu_choose==5 && dem==1 && CONNECTED==true){
+      }else if(wifiMenu_choose==5 && dem==1 && WiFi.status()==WL_CONNECTED){
         onsubmenu=false;
         wifiMenu_choose=-1;
         displayMenu();
+     }
+     if(dem==5&&setting == true){
+        setting=false;
+        onsubmenu=false;
+        dem=0;
+        maindisplay();
      }
     }
       isLongpress = false;
@@ -713,10 +788,7 @@ void set_time(){
   display.setTextColor(SH110X_WHITE);
   display.setCursor(30,0);
   display.print("Set Time");
-  if(auto_time_mode==true && CONNECTED==true){
-    gio=ntpTime.hour;
-    phut=ntpTime.minute;
-    giay=ntpTime.second;
+  if(auto_time_mode==true && ERa_CONNECTED==true){
     display.clearDisplay();
     display.setTextColor(1);
     display.setCursor(17, 14);
@@ -795,17 +867,41 @@ void time_setting()
 void region()
 {
   display.clearDisplay();
+  display.setTextColor(1);
   display.setTextSize(1);
-  display.setTextColor(SH110X_WHITE);
-  display.setCursor(20,0);
-  display.print("Region");
-  display.setTextSize(2);
-  display.setTextColor(SH110X_WHITE);
-  display.setCursor(20,20);
-  display.setTextSize(1);
-  display.print("UTC: ");
-  display.setCursor(60,20);
+  display.setCursor(25, 4);
+  display.print("Region Setting");
+  display.setCursor(34, 19);
+  display.print("UTC:");
+  display.setCursor(68, 19);
   display.print(region_list[utc]);
+  display.setTextSize(2);
+  display.setCursor(15, 43);
+  display.print(hours);
+  display.setTextSize(1);
+  display.setCursor(42, 47);
+  display.print(":");
+  display.setTextSize(2);
+  display.setCursor(53, 43);
+  display.print(minutes);
+  display.setTextSize(1);
+  display.setCursor(81, 47);
+  display.print(":");
+  display.setTextSize(2);
+  display.setCursor(92, 43);
+  display.print(seconds);
+
+  // display.setTextSize(1);
+  // display.setTextColor(SH110X_WHITE);
+  // display.setCursor(20,0);
+  // display.print("Region");
+  // display.setTextSize(2);
+  // display.setTextColor(SH110X_WHITE);
+  // display.setCursor(20,20);
+  // display.setTextSize(1);
+  // display.print("UTC: ");
+  // display.setCursor(60,20);
+  // display.print(region_list[utc]);
   display.display();
 }
 void calib()
@@ -874,7 +970,6 @@ void hard_reset(){
       EEPROM.write(i,0);
       EEPROM.commit();
     }
-    WiFiManager wm;
     wm.resetSettings();
     delay(2000);
     ESP.restart();
@@ -930,8 +1025,7 @@ String RSSIasQuality(){
 }
 void wifi()
 { 
-  if(CONNECTED==false){
-    wm.autoConnect(SSID_AP,"");
+  if(WiFi.status() != WL_CONNECTED){
     display.clearDisplay();
     display.setTextColor(1);
     display.setCursor(4, 3);
@@ -942,17 +1036,17 @@ void wifi()
     display.print("And Scan -->");
     display.drawBitmap(69, 0, image_qr_1_bits, 64, 64, 1);
     display.display();
-    return;
-  }else if(CONNECTED==true){
+  }else if(WiFi.status() == WL_CONNECTED){
   IPAddress ip;
   ip=WiFi.localIP();
+  
   String mac;
   if(millis()- preRSSI>=5000){
     rssi = RSSIasQuality();
   }
   mac=WiFi.macAddress();
   const char* wifi_menu[]={"SSID: ","IP:","MAC:","RSSI: ","Disconnect","Back"};
-  String infor[]={wm.getWiFiSSID(),ConverIpToString(ip),mac,rssi};
+  String infor[]={WiFi.SSID(),ConverIpToString(ip),mac,rssi};
   display.clearDisplay();
   display.setTextColor(1);
   display.setTextSize(1);
@@ -992,7 +1086,7 @@ void wifi()
 }
 void hienthi()
 {
-  if(setting)
+  if(setting==true)
   {
     if(onsubmenu)
     {
