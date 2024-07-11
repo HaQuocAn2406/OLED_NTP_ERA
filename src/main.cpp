@@ -27,7 +27,7 @@ Nhấn để chuyển giữa các giá trị muốn thay đổi
 #define ERA_DEBUG
 #define ERA_SERIAL Serial
 #define ENCODER_STEPS 4
-#define DHTPIN 4
+#define DHTPIN 19
 // #define DHTTYPE DHT11
 
 const int SCREEN_WIDTH = 128;
@@ -155,7 +155,7 @@ unsigned long interval =1000;
 static unsigned int changemode=0;
 static unsigned int changemode_auto_time=0;
 static unsigned int changemode_auto_region=0;
-unsigned long current_time;
+unsigned long current_time=-25200;
 String rssi;
 char SSID_AP[]={"ERa-Clock"};
 String menus[] = {"Time","WiFi", "Calib","Chip Temperature","Hard Reset","Back"};
@@ -235,12 +235,14 @@ void TaskEra(void * parameters){
       syncTime.getTime(ntpTime);
     }
 }
-// void DHT_Task(void * parameters){
-//   for(;;){
-//     vTaskDelay(2000);
+void DHT_Task(void * parameters){
+      
+  for(;;){
+    vTaskDelay(2000);
 
-//   }
-// }
+
+  }
+}
 // void connect_succes(){
 //   display.clearDisplay();
 //   display.setTextColor(SH110X_WHITE);
@@ -259,7 +261,7 @@ void setup() {
   // SPIFFS.begin(true);
   Serial.begin(115200); 
   syncTime.begin();
-    dht.setup(4, DHTesp::DHT11);
+  dht.setup(DHTPIN, DHTesp::DHT11);
   /////////////////////////////////////////////////////////
   display.begin(i2c_Address, true); // Address 0x3C default
   display.display();
@@ -283,7 +285,7 @@ void loop()
 {
   rotary_loop();
   hienthi();
-  if(dht.getStatusString()== "OK"){
+      if(dht.getStatusString()== "OK"){
     temperature = dht.getTemperature();
     humidity=dht.getHumidity();
   }else{
@@ -366,17 +368,15 @@ void time_calculate(unsigned long current_time ){
     minutes = (local_time / 60) % 60;
     seconds = local_time % 60;
     // Print local time
-    Serial.print("Local time in VietNam: ");
-    Serial.print(hours);
-    Serial.print(":");
-    if (minutes < 10) Serial.print("0"); // Add leading zero if needed
-    Serial.print(minutes);
-    Serial.print(":");
-    if (seconds < 10) Serial.print("0"); // Add leading zero if needed
-    Serial.println(seconds);
-    // gio=hours;
-    // phut=minutes;
-    // giay=seconds;
+    // Serial.print("Local time in VietNam: ");
+    // Serial.print(hours);
+    // Serial.print(":");
+    // if (minutes < 10) Serial.print("0"); // Add leading zero if needed
+    // Serial.print(minutes);
+    // Serial.print(":");
+    // if (seconds < 10) Serial.print("0"); // Add leading zero if needed
+    // Serial.println(seconds);
+    
 }
 void displayMenu()
 {
@@ -700,7 +700,7 @@ void handle_rotary_button() {
       if(dem==0 && ontime_setting==true){// control submenu 1
         switch (time_menuIndex)
         {
-          case 0:
+          case 0:      
             onsubmenu1=true;
             changemode=!changemode;
           break;
@@ -746,7 +746,7 @@ void handle_rotary_button() {
         reset_sel=0;
         displayMenu();
       }
-      if(wifiMenu_choose==4 && dem==1 ){
+      if(wifiMenu_choose==4 && dem==1 && WiFi.status()==WL_CONNECTED ){
         display.clearDisplay();
         display.setTextColor(1);
         display.setCursor(16, 13);
@@ -1036,6 +1036,7 @@ void wifi()
     display.print("And Scan -->");
     display.drawBitmap(69, 0, image_qr_1_bits, 64, 64, 1);
     display.display();
+    wm.autoConnect(SSID_AP,"");
   }else if(WiFi.status() == WL_CONNECTED){
   IPAddress ip;
   ip=WiFi.localIP();
