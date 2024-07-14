@@ -8,7 +8,6 @@ Nhấn để chuyển giữa các giá trị muốn thay đổi
 #define ERA_AUTH_TOKEN "2a377e27-cf9a-4061-ba71-bdcedde02e64"
 #define ERA_DEBUG
 #define ERA_SERIAL Serial
-// #define WM_DEBUG_LEVEL 4
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
@@ -16,7 +15,6 @@ Nhấn để chuyển giữa các giá trị muốn thay đổi
 #include <EEPROM.h>
 #include <ERa.hpp>
 #include <Time/ERaEspTime.hpp>
-// #include <WiFiManager.h> 
 #include <string.h>
 #include "DHTesp.h"
 #include<time.h>
@@ -106,7 +104,6 @@ bool onsubmenu=false;
 bool rotatingDown;
 bool setting = false;
 bool ERa_CONNECTED = false;
-bool auto_time_sel;
 bool nothing_changed=true;
 bool onsubmenu1=false;
 bool onsubmenu1a=false;
@@ -118,7 +115,6 @@ int save=0;
 int reset_sel= 0;
 int offset_utc;
 int hours;
-int _hours;
 int minutes ;
 int seconds;
 int _gio,_phut;
@@ -137,7 +133,6 @@ int time_menuIndex=0;
 int currentRotaryValue;
 int previousRotaryValue;
 int wifiMenu_choose=0;
-int count_click=0;
 float offset=0.00;
 float _offset;
 float nhietdo;

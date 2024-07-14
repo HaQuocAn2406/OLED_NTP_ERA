@@ -15,7 +15,13 @@
 			"hienthi.h": "c",
 			"ostream": "cpp",
 			"*.tpp": "cpp",
-			"string_view": "cpp"
+			"string_view": "cpp",
+			"chrono": "cpp",
+			"condition_variable": "cpp",
+			"mutex": "cpp",
+			"sstream": "cpp",
+			"thread": "cpp",
+			"typeinfo": "cpp"
 		}
 	}
 }
