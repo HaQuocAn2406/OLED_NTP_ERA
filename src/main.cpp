@@ -1,8 +1,8 @@
 
 #define ERA_LOCATION_VN
 #define ERA_AUTH_TOKEN "2a377e27-cf9a-4061-ba71-bdcedde02e64"
-// #define ERA_DEBUG
-// #define ERA_SERIAL Serial
+#define ERA_DEBUG
+#define ERA_SERIAL Serial
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
