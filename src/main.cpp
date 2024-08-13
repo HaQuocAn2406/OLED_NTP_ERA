@@ -18,7 +18,6 @@
 #include "nhietke.h"
 #include "FreeSans10pt7b.h"
 #include <JPEGDecoder.h>
-#include "jpeg1.h"
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "bitmap.h"
@@ -544,7 +543,7 @@ void hienthi()
 void weather_screen()
 {
 
-  drawArrayJpeg(cloud3, sizeof(cloud3), 50, 50); // Draw a jpeg image stored in memory
+  // drawArrayJpeg(cloud3, sizeof(cloud3), 50, 50); // Draw a jpeg image stored in memory
 }
 void renderJPEG(int xpos, int ypos)
 {
@@ -708,12 +707,12 @@ void maindisplay()
   ////////////////////////////////////////////////////////
   spr.setTextColor(0xFFFF, TFT_BLACK);
   spr.setTextSize(2);
-  spr.drawString("IN SIDE", 8, 114);
+  spr.drawString("INDOOR", 8, 114);
   spr.drawBitmap(20, 136, image_weather_humidity_bits, 11, 16, 0x57FF);
   spr.drawBitmap(20, 162, image_weather_temperature_bits, 16, 16, 0xFAAA);
   spr.drawNumber(humi_room, 42, 138);
   spr.drawNumber(temp_room, 42, 162);
-  spr.drawString("OUT SIDE", 137, 113);
+  spr.drawString("OUTDOOR", 137, 113);
   spr.drawBitmap(149, 137, image_weather_humidity_bits, 11, 16, 0x57FF);
   spr.drawFloat(humi_outside, 2, 170, 138);
   spr.drawBitmap(149, 163, image_weather_temperature_bits, 16, 16, 0xFAAA);
