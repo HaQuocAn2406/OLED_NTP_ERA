@@ -1509,18 +1509,18 @@ void Chip_Temp()
   display.drawBitmap(2, 11, image_weather_temperature_bits, 16, 16, 1);
   display.display();
 #else
-    static const unsigned char PROGMEM image_weather_temperature_bits[] = {0x1c,0x00,0x22,0x02,0x2b,0x05,0x2a,0x02,0x2b,0x38,0x2a,
-    0x60,0x2b,0x40,0x2a,0x40,0x2a,0x60,0x49,0x38,0x9c,0x80,0xae,0x80,0xbe,0x80,0x9c,0x80,0x41,0x00,0x3e,0x00};
-    display.clearDisplay();
-    display.setTextColor(TFT_WHITE);
-    display.setTextSize(1);
-    display.setCursor(21, 15);
-    display.print("Chip Temperature");
-    display.setTextSize(2);
-    display.setCursor(36, 34);
-    display.print(nhietdo);
-    display.drawBitmap(2, 11, image_weather_temperature_bits, 16, 16, 1);
-    display.display();
+    // static const unsigned char PROGMEM image_weather_temperature_bits[] = {0x1c,0x00,0x22,0x02,0x2b,0x05,0x2a,0x02,0x2b,0x38,0x2a,
+    // 0x60,0x2b,0x40,0x2a,0x40,0x2a,0x60,0x49,0x38,0x9c,0x80,0xae,0x80,0xbe,0x80,0x9c,0x80,0x41,0x00,0x3e,0x00};
+    // display.clearDisplay();
+    // display.setTextColor(TFT_WHITE);
+    // display.setTextSize(1);
+    // display.setCursor(21, 15);
+    // display.print("Chip Temperature");
+    // display.setTextSize(2);
+    // display.setCursor(36, 34);
+    // display.print(nhietdo);
+    // display.drawBitmap(2, 11, image_weather_temperature_bits, 16, 16, 1);
+    // display.display();
 #endif
 }
 String ConverIpToString(IPAddress ip)
