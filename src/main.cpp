@@ -1,8 +1,8 @@
 
 #define ERA_LOCATION_VN
 #define ERA_AUTH_TOKEN "2a377e27-cf9a-4061-ba71-bdcedde02e64"
-// #define ERA_DEBUG
-// #define ERA_SERIAL Serial
+#define ERA_DEBUG
+#define ERA_SERIAL Serial
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
@@ -51,7 +51,6 @@
 DHTesp dht;
 ERaEspTime syncTime;
 TimeElement_t ntpTime;
-
 
 AiEsp32RotaryEncoder rotaryEncoder(ENCODER_CLK, ENCODER_DT,ENCODER_SW);
 
@@ -1229,7 +1228,7 @@ void DHT()
 #else
     static const unsigned char PROGMEM image_weather_temperature_bits[] = {0x1c,0x00,0x22,0x02,0x2b,0x05,0x2a,0x02,0x2b,0x38,0x2a,
     0x60,0x2b,0x40,0x2a,0x40,0x2a,0x60,0x49,0x38,0x9c,0x80,0xae,0x80,0xbe,0x80,0x9c,0x80,0x41,0x00,0x3e,0x00};
-    display.clearDisplay();
+    // display.clearDisplay();
     display.setTextColor(TFT_WHITE);
     display.setTextSize(1);
     display.setCursor(21, 15);
@@ -1238,7 +1237,7 @@ void DHT()
     display.setCursor(36, 34);
     display.print(nhietdo);
     display.drawBitmap(2, 11, image_weather_temperature_bits, 16, 16, 1);
-    display.display();
+    // display.display();
 #endif
 }
 String ConverIpToString(IPAddress ip) {
