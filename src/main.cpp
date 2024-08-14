@@ -21,6 +21,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "bitmap.h"
+#include "FreeMono10pt7b.h"
 #define ENCODER_CLK 25
 #define ENCODER_DT 26
 #define ENCODER_SW 27
@@ -78,8 +79,7 @@ String region_list[] = {"UTC-12", "UTC-11", "UTC-10", "UTC-9", "UTC-8", "UTC-7",
 
 String rssi;
 String location = "VIET NAM";
-
-int16_t thu;
+int16_t DoW;
 int16_t months = 0;
 uint16_t years = 1970;
 uint16_t days = 1;
@@ -87,6 +87,7 @@ uint16_t hours, _hours;
 uint16_t minutes, _minutes;
 uint16_t seconds;
 uint16_t oldsecond;
+int batt = 100;
 int clicked = 0;
 bool enable_reset = false;
 bool auto_time_mode = false;
@@ -95,7 +96,6 @@ bool sub_menu_flag = false;
 bool rotatingDown;
 bool setting_menu_flag = false;
 bool ERa_CONNECTED = false;
-bool nothing_changed = true;
 bool set_time_flag = false;
 bool region_flag = false;
 bool ontime_setting = false;
@@ -106,7 +106,6 @@ int second_count = 0;
 int reset_sel = 0;
 int offset_utc;
 int utc = 19;
-int _utc;
 int startIndex;
 int endIndex;
 int maxVisibleItems = 6;
@@ -120,8 +119,8 @@ int wifiMenu_choose = 0;
 float offset = 0.00;
 float _offset;
 float nhietdo;
-int humi_room;
-int temp_room;
+float humi_room;
+float temp_room;
 float temp_outside, humi_outside;
 const int add_hours = 0;
 const int add_minutes = 4;
@@ -144,8 +143,17 @@ unsigned int changemode = 0;
 unsigned int changemode_auto_time = 0;
 unsigned long current_time = -25200;
 long prevMillis = 0, prevMillis_client = 0;
-
+// class defaul_setting:
+// {
+// private:
+//   int utc = 19;
+//   int16_t DoW=0;
+//   int16_t months = 0;
+//   uint16_t years = 1970;
+//   uint16_t days = 1;
+// }
 String result;
+String weather;
 void displayMenu();
 void maindisplay();
 void rotary_loop();
@@ -166,6 +174,15 @@ void renderJPEG(int xpos, int ypos);
 void connect_succes();
 void get_openweather();
 void time_calculate(unsigned long current_time);
+int batt_get();
+
+void batt_get(int *batt)
+{
+  int lower = 1;
+  int upper = 100;
+  *batt = (rand() % (upper - lower + 1)) + lower;
+  // Serial.println(batt);
+}
 void IRAM_ATTR readEncoderISR()
 {
   rotaryEncoder.readEncoder_ISR();
@@ -193,10 +210,8 @@ void TaskEra(void *parameters)
 {
   Serial.println("ERa Started");
   ERa.setScanWiFi(true);
-
   /* Initializing the ERa library. */
   ERa.begin();
-
   /* Setup timer called function every second */
   ERa.addInterval(1000L, timerEvent);
   for (;;)
@@ -274,10 +289,11 @@ void setup()
   display.clearDisplay();
 #else
   spr.init();
-  spr.setRotation(1);
+  tft.setRotation(1);
   spr.createSprite(240, 230);
   spr.fillScreen(TFT_RED);
   tft.fillScreen(TFT_BLACK);
+  spr.pushSprite(0, 0);
 #endif
   EEPROM.begin(FLASH_MEMORY_SIZE);
   minutes = EEPROM.read(add_minutes);
@@ -298,7 +314,7 @@ void get_openweather()
   HTTPClient http;
 
   // Set HTTP Request Final URL with Location and API key information
-  http.begin(URL + "lat=" + lat + "&lon=" + lon + "&units=metric&appid=" + API_KEY);
+  http.begin(URL + "lat=" + lat + "&lon=" + lon + "&units=metric&appid=" + API_KEY+"&lang=en");
 
   // start connection and send HTTP Request
   int httpCode = http.GET();
@@ -314,12 +330,14 @@ void get_openweather()
     // Retrieve some information about the weather from the JSON format
     JsonDocument doc;
     deserializeJson(doc, JSON_Data);
-    JsonObject obj = doc.as<JsonObject>();
+    JsonObject obj= doc.as<JsonObject>();
 
     // Display the Current Weather Info
     temp_outside = obj["main"]["temp"].as<float>();
     humi_outside = obj["main"]["humidity"].as<float>();
+    weather = obj["weather"][0]["description"].as<String>();
     location = obj["name"].as<String>();
+    Serial.println(weather);
   }
   else
   {
@@ -352,22 +370,19 @@ void loop()
     hours = ntpTime.hour;
     minutes = ntpTime.minute;
     seconds = ntpTime.second;
-    thu = ntpTime.wDay - 1;
+    DoW = ntpTime.wDay - 1;
     days = ntpTime.day;
     months = ntpTime.month - 1;
     years = ntpTime.year + 1970;
   }
-  // else if
-  // {
-  //     current_time = (hours * 3600 + minutes * 60) - (list[utc] * 3600);
-  //     time_calculate(current_time);
-  // }
-  else if (millis() - previousMillis >= 1000)
+  if (millis() - previousMillis >= 1000)
   {
     previousMillis = millis();
     nhietdo = temperatureRead();
     second_count++;
-    time_calculate(current_time);
+    batt_get(&batt);
+    if (ERa_CONNECTED == false)
+      time_calculate(current_time);
     if (second_count == 300)
     {
       second_count = 0;
@@ -446,9 +461,10 @@ void displayMenu()
   display.display();
 #else
   spr.fillSprite(TFT_BLACK);
-  spr.setTextColor(0xFFFF);
+  spr.setTextColor(TFT_WHITE);
   spr.setTextSize(2);
   spr.drawString("Setting", 66, 13);
+  spr.setTextColor(0x4208);
   spr.setTextSize(2);
   if (rotatingDown)
   {
@@ -475,6 +491,11 @@ void displayMenu()
     if (i == setting_menuIndex)
     {
       spr.drawRoundRect(10, (i - startIndex) * 33 + 30, spr.textWidth(menus[i]) + 5, 25, 4, TFT_WHITE);
+      spr.setTextColor(TFT_WHITE);
+    }
+    else
+    {
+      spr.setTextColor(0x4208);
     }
     spr.setTextSize(2);
     spr.drawString(menus[i], 14, (i - startIndex) * 33 + 35);
@@ -648,7 +669,7 @@ void maindisplay()
   }
   display.drawLine(0, 45, 127, 45, 1);
   display.setCursor(2, 51);
-  display.print(daysOfTheWeek[thu]);
+  display.print(daysOfTheWeek[DoW]);
   display.setCursor(44, 51);
   display.print(monthOfTheYear[months]);
   display.setCursor(26, 51);
@@ -677,7 +698,31 @@ void maindisplay()
   // }
 #else
   spr.fillScreen(TFT_BLACK);
-  spr.drawBitmap(0, 0, image_battery_full_bits, 24, 16, 0xFFFF);
+  if (batt > 83)
+  {
+    spr.drawBitmap(0, 0, image_battery_full_bits, 24, 16, 0x1FE0);
+  }
+  else if (batt > 67 && batt <= 83)
+  {
+    spr.drawBitmap(0, 0, image_battery_83_bits, 24, 16, 0x7F8F);
+  }
+  else if (batt > 50 && batt <= 67)
+  {
+    spr.drawBitmap(0, 0, image_battery_67_bits, 24, 16, 0xF7A0);
+  }
+  else if (batt > 33 && batt <= 50)
+  {
+    spr.drawBitmap(0, 0, image_battery_50_bits, 24, 16, 0xFD60);
+  }
+  else if (batt > 17 && batt <= 33)
+  {
+    spr.drawBitmap(0, 0, image_battery_33_bits, 24, 16, 0xF1E2);
+  }
+  else
+  {
+    spr.drawBitmap(0, 0, image_battery_17_bits, 24, 16, 0xF800);
+  }
+
   oldsecond = seconds;
   spr.setTextSize(1);
   byte xpos = 10;
@@ -709,17 +754,22 @@ void maindisplay()
   spr.setTextColor(0xFFFF, TFT_BLACK);
   spr.setTextSize(2);
   spr.drawString("INDOOR", 8, 114);
-  spr.drawBitmap(20, 136, image_weather_humidity_bits, 11, 16, 0x57FF);
-  spr.drawBitmap(20, 162, image_weather_temperature_bits, 16, 16, 0xFAAA);
-  spr.drawNumber(humi_room, 42, 138);
-  spr.drawNumber(temp_room, 42, 162);
+  spr.drawBitmap(5, 135, image_weather_humidity_bits, 11, 16, 0x57FF);
+  spr.drawBitmap(5, 161, image_weather_temperature_bits, 16, 16, 0xFAAA);
+  spr.drawNumber(humi_room, 27, 137);
+  spr.drawString("%", 27 + spr.textWidth((String)humi_room) - 38 + 6, 138);
+  spr.drawFloat(temp_room, 1, 27, 160);
   spr.drawString("OUTDOOR", 137, 113);
-  spr.drawBitmap(149, 137, image_weather_humidity_bits, 11, 16, 0x57FF);
-  spr.drawFloat(humi_outside, 2, 170, 138);
-  spr.drawBitmap(149, 163, image_weather_temperature_bits, 16, 16, 0xFAAA);
-  spr.drawFloat(temp_outside, 2, 170, 165);
-  spr.drawString(location, 7, 201);
-  spr.drawString(daysOfTheWeek[thu], 28, 80);
+  spr.drawBitmap(125, 135, image_weather_humidity_bits, 11, 16, 0x57FF);
+  spr.drawNumber(humi_outside, 146, 136);
+  spr.drawString("%", 146 + spr.textWidth((String)humi_outside) - 38 + 6, 138);
+  spr.drawBitmap(125, 161, image_weather_temperature_bits, 16, 16, 0xFAAA);
+  spr.drawFloat(temp_outside, 1, 146, 163);
+  spr.drawBitmap(2, 209, image_weather_cloud_sunny_bits, 17, 16, 0xFFFF);
+  tft.setFreeFont(&FreeMono10pt7b);
+  spr.drawString(weather, 10, 209);
+  spr.drawString(location, 24, 194);
+  spr.drawString(daysOfTheWeek[DoW], 28, 80);
   spr.drawNumber(days, 79, 80);
   spr.drawString(monthOfTheYear[months], 112, 80);
   spr.drawNumber(years, 162, 80);
@@ -729,20 +779,21 @@ void maindisplay()
   spr.drawLine(0, 229, 238, 229, 0x57FF);
   if (WiFi.status() != WL_CONNECTED)
   {
-    spr.drawBitmap(220, 200, image_wifi_not_connected_bits, 19, 16, TFT_WHITE, TFT_BLACK);
+    spr.drawBitmap(29, 1, image_wifi_not_connected_bits, 19, 16, TFT_WHITE, TFT_BLACK);
   }
   else
   {
     if (!ERa_CONNECTED)
     {
 
-      spr.drawBitmap(205, 200, image_operation_warning_bits, 16, 16, 0xFFEA, TFT_BLACK);
-      spr.drawBitmap(220, 200, image_wifi_full_bits, 19, 16, TFT_WHITE, TFT_BLACK);
+      spr.drawBitmap(51, 1, image_operation_warning_bits, 16, 16, 0xFFEA, TFT_BLACK);
+      spr.drawBitmap(29, 1, image_wifi_full_bits, 19, 16, TFT_WHITE, TFT_BLACK);
+      spr.pushSprite(0, 0);
     }
     else
     {
-      spr.fillRect(205, 209, 16, 16, TFT_BLACK);
-      spr.drawBitmap(220, 200, image_wifi_full_bits, 19, 16, TFT_WHITE, TFT_BLACK);
+      spr.fillRect(25, 0, 16, 16, TFT_BLACK);
+      spr.drawBitmap(29, 1, image_wifi_full_bits, 19, 16, TFT_WHITE, TFT_BLACK);
     }
   }
   spr.pushSprite(0, 0);
@@ -790,10 +841,10 @@ void rotary_loop()
               switch (settime_menuIndex)
               {
               case 0: // WeekDays
-                ++thu;
-                if (thu > 6)
+                ++DoW;
+                if (DoW > 6)
                 {
-                  thu = 0;
+                  DoW = 0;
                 }
                 break;
               case 1: // Days
@@ -873,10 +924,10 @@ void rotary_loop()
               switch (settime_menuIndex)
               {
               case 0:
-                --thu;
-                if (thu < 0)
+                --DoW;
+                if (DoW < 0)
                 {
-                  thu = 6;
+                  DoW = 6;
                 }
                 break;
               case 1:
@@ -984,14 +1035,6 @@ void rotary_loop()
           {
             offset = -5;
           }
-        }
-        if (_utc != utc)
-        {
-          nothing_changed = false;
-        }
-        else
-        {
-          nothing_changed = true;
         }
         break;
       case 4: // Choose Reset or Not
@@ -1249,7 +1292,7 @@ void set_time()
     sprintf(str_nam, "%u", years);
     sprintf(str_hours, "%u", _hours);
     sprintf(str_minutes, "%u", _minutes);
-    const char *rs[] = {daysOfTheWeek[thu], str_ngay, monthOfTheYear[months], str_nam, str_hours, str_minutes};
+    const char *rs[] = {daysOfTheWeek[DoW], str_ngay, monthOfTheYear[months], str_nam, str_hours, str_minutes};
 #ifdef SH110X
     display.clearDisplay();
     display.setTextSize(1);
