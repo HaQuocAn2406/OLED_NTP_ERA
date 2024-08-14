@@ -677,10 +677,11 @@ void maindisplay()
   // }
 #else
   spr.fillScreen(TFT_BLACK);
+  spr.drawBitmap(0, 0, image_battery_full_bits, 24, 16, 0xFFFF);
   oldsecond = seconds;
   spr.setTextSize(1);
   byte xpos = 10;
-  byte ypos = 17;
+  byte ypos = 23;
   // spr.setTextColor(0x3186, TFT_BLACK);  // Leave a 7 segment ghost image, comment out next line!
   // spr.drawString("88:88:88",xpos,ypos,7); // Overwrite the text to clear it
   spr.setTextColor(0xB7C0);
