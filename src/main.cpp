@@ -766,8 +766,8 @@ void maindisplay()
   spr.drawBitmap(125, 161, image_weather_temperature_bits, 16, 16, 0xFAAA);
   spr.drawFloat(temp_outside, 1, 146, 163);
   spr.drawBitmap(2, 209, image_weather_cloud_sunny_bits, 17, 16, 0xFFFF);
-  tft.setFreeFont(&FreeMono10pt7b);
-  spr.drawString(weather, 10, 209);
+  // tft.setFreeFont(&FreeMono10pt7b);
+  spr.drawString(weather, 22, 209);
   spr.drawString(location, 24, 194);
   spr.drawString(daysOfTheWeek[DoW], 28, 80);
   spr.drawNumber(days, 79, 80);
