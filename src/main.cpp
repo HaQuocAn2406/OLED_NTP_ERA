@@ -22,6 +22,7 @@
 #include <ArduinoJson.h>
 #include "bitmap.h"
 #include "FreeMono10pt7b.h"
+#include "icon.h"
 #define ENCODER_CLK 25
 #define ENCODER_DT 26
 #define ENCODER_SW 27
@@ -154,6 +155,7 @@ long prevMillis = 0, prevMillis_client = 0;
 // }
 String result;
 String weather;
+String icon_id;
 void displayMenu();
 void maindisplay();
 void rotary_loop();
@@ -289,7 +291,7 @@ void setup()
   display.clearDisplay();
 #else
   spr.init();
-  tft.setRotation(1);
+  // tft.setRotation(1);
   spr.createSprite(240, 230);
   spr.fillScreen(TFT_RED);
   tft.fillScreen(TFT_BLACK);
@@ -314,7 +316,7 @@ void get_openweather()
   HTTPClient http;
 
   // Set HTTP Request Final URL with Location and API key information
-  http.begin(URL + "lat=" + lat + "&lon=" + lon + "&units=metric&appid=" + API_KEY+"&lang=en");
+  http.begin(URL + "lat=" + lat + "&lon=" + lon + "&units=metric&appid=" + API_KEY + "&lang=en");
 
   // start connection and send HTTP Request
   int httpCode = http.GET();
@@ -330,13 +332,14 @@ void get_openweather()
     // Retrieve some information about the weather from the JSON format
     JsonDocument doc;
     deserializeJson(doc, JSON_Data);
-    JsonObject obj= doc.as<JsonObject>();
+    JsonObject obj = doc.as<JsonObject>();
 
     // Display the Current Weather Info
     temp_outside = obj["main"]["temp"].as<float>();
     humi_outside = obj["main"]["humidity"].as<float>();
     weather = obj["weather"][0]["description"].as<String>();
     location = obj["name"].as<String>();
+    icon_id = obj["weather"][0]["icon"].as<String>();
     Serial.println(weather);
   }
   else
@@ -350,20 +353,12 @@ void loop()
 {
   rotary_loop();
   hienthi();
+  temp_room = dht.getTemperature() + offset;
+  humi_room = dht.getHumidity() + offset;
   if (WiFi.status() == WL_CONNECTED && (millis() - prevMillis_client >= 10000))
   {
     prevMillis_client = millis();
     get_openweather();
-  }
-  if (dht.getStatusString() == "OK")
-  {
-    temp_room = dht.getTemperature() + offset;
-    humi_room = dht.getHumidity() + offset;
-  }
-  else
-  {
-    temp_room = 0;
-    humi_room = 0;
   }
   if (ERa_CONNECTED == true && auto_time_mode == true)
   {
@@ -541,34 +536,115 @@ void hienthi()
   }
   else // Hiển thị màn hình chính
   {
-    maindisplay();
-    sub_menu_flag = false;
-    setting_menuIndex = 0;
-    // if (millis() - prevMillis >= 10000)
-    // {
-    //   prevMillis = millis();
-    //   screen = !screen;
-    // }
-    // if (screen)
-    // {
 
-    // }
-    // else
-    // {
-    //   spr.fillScreen(TFT_BLACK);
-    //   weather_screen();
-    //   spr.pushSprite(0, 0);
-    // }
+    // maindisplay();
+    // sub_menu_flag = false;
+    // setting_menuIndex = 0;
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      if (millis() - prevMillis >= 3000)
+      {
+        prevMillis = millis();
+        screen = !screen;
+      }
+      if (screen)
+      {
+        maindisplay();
+        sub_menu_flag = false;
+        setting_menuIndex = 0;
+      }
+      else
+      {
+        spr.fillScreen(TFT_BLACK);
+        weather_screen();
+        spr.pushSprite(0, 0);
+      }
+    }
+    else
+    {
+      maindisplay();
+      sub_menu_flag = false;
+      setting_menuIndex = 0;
+    }
   }
 }
 void weather_screen()
 {
-
-  // drawArrayJpeg(cloud3, sizeof(cloud3), 50, 50); // Draw a jpeg image stored in memory
+  if (icon_id == "01d")
+  {
+    drawArrayJpeg(_01d, sizeof(_01d), 50, 50);
+  }
+  else if (icon_id == "01n")
+  {
+    drawArrayJpeg(_01d, sizeof(_01d), 50, 50);
+  }
+  else if (icon_id == "02d")
+  {
+    drawArrayJpeg(_02d, sizeof(_02d), 50, 50);
+  }
+  else if (icon_id == "02n")
+  {
+    drawArrayJpeg(_02n, sizeof(_02n), 50, 50);
+  }
+  else if (icon_id == "03d")
+  {
+    drawArrayJpeg(_03d, sizeof(_03d), 50, 50);
+  }
+  else if (icon_id == "03n")
+  {
+    drawArrayJpeg(_03n, sizeof(_03n), 50, 50);
+  }
+  else if (icon_id == "04n")
+  {
+    drawArrayJpeg(_04n, sizeof(_04n), 50, 50);
+  }
+  else if (icon_id == "04d")
+  {
+    drawArrayJpeg(_04d, sizeof(_04d), 50, 50);
+  }
+  else if (icon_id == "09n")
+  {
+    drawArrayJpeg(_09n, sizeof(_09n), 50, 50);
+  }
+  else if (icon_id == "09d")
+  {
+    drawArrayJpeg(_09n, sizeof(_09n), 50, 50);
+  }
+  else if (icon_id == "10n")
+  {
+    drawArrayJpeg(_10n, sizeof(_10n), 50, 50);
+  }
+  else if (icon_id == "10d")
+  {
+    drawArrayJpeg(_10d, sizeof(_10d), 50, 50);
+  }
+  else if (icon_id == "11d")
+  {
+    drawArrayJpeg(_11d, sizeof(_11d), 50, 50);
+  }
+  else if (icon_id == "11n")
+  {
+    drawArrayJpeg(_11n, sizeof(_11n), 50, 50);
+  }
+  else if (icon_id == "13d")
+  {
+    drawArrayJpeg(_13d, sizeof(_13d), 50, 50);
+  }
+  else if (icon_id == "13n")
+  {
+    drawArrayJpeg(_13n, sizeof(_13n), 50, 50);
+  }
+  else if (icon_id == "50n")
+  {
+    drawArrayJpeg(_50n, sizeof(_50n), 50, 50);
+  }
+  else if (icon_id == "50d")
+  {
+    drawArrayJpeg(_50d, sizeof(_50d), 50, 50);
+  }
 }
 void renderJPEG(int xpos, int ypos)
 {
-
   // retrieve information about the image
   uint16_t *pImg;
   uint16_t mcu_w = JpegDec.MCUWidth;
@@ -1075,6 +1151,15 @@ void handle_rotary_button()
     if (!lastTimeButtonDown)
     {
       lastTimeButtonDown = millis();
+      click_time++;
+      if (millis() - doubleClickMillis <= 500)
+      {
+        doubleClickMillis = millis();
+        Serial.println("DoubleClick");
+        click_time = 0;
+      }
+      if (click_time > 1)
+        click_time = 0;
     }
     if (!isLongpress && (millis() - lastTimeButtonDown >= longPressAfterMiliseconds) && sub_menu_flag)
     {
