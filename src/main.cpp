@@ -22,6 +22,7 @@
 #include "Free_Fonts.h"
 #include "icon.h"
 #include "tahoma10pt7b.h"
+// #define GFXFF 1
 #define TAHOMA &tahoma10pt7b
 #define ENCODER_CLK 25
 #define ENCODER_DT 26
@@ -575,7 +576,7 @@ void weather_screen()
   }
   else if (icon_id == "01n")
   {
-    drawArrayJpeg(_01d, sizeof(_01d), 50, 50);
+    drawArrayJpeg(_01n, sizeof(_01n), 50, 50);
   }
   else if (icon_id == "02d")
   {
@@ -1111,7 +1112,7 @@ void rotary_loop()
         {
           rotatingDown = true;
           wifiMenu_choose++;
-          if (wifiMenu_choose > 5)
+          if (wifiMenu_choose > 4)
           {
             wifiMenu_choose = 0;
           }
@@ -1122,7 +1123,7 @@ void rotary_loop()
           wifiMenu_choose--;
           if (wifiMenu_choose < 0)
           {
-            wifiMenu_choose = 5;
+            wifiMenu_choose = 4;
           }
         }
         break;
@@ -1331,7 +1332,7 @@ void handle_rotary_button()
       //////////////////////////////////////////////////////////////////////
 
       ///////////////// WiFi setting_menu_flag Action /////////////////////////////////
-      if (wifiMenu_choose == 4 && setting_menuIndex == 1 && WiFi.status() == WL_CONNECTED) // Disconnect
+      if (wifiMenu_choose == 3 && setting_menuIndex == 1 && WiFi.status() == WL_CONNECTED) // Disconnect
       {
 #ifdef SH110X
         display.clearDisplay();
@@ -1369,7 +1370,7 @@ void handle_rotary_button()
         ERa.switchToConfig(true);
         delay(100);
       }
-      else if (wifiMenu_choose == 5 && setting_menuIndex == 1 && WiFi.status() == WL_CONNECTED) // Back
+      else if (wifiMenu_choose == 4 && setting_menuIndex == 1 && WiFi.status() == WL_CONNECTED) // Back
       {
         sub_menu_flag = false;
         wifiMenu_choose = -1;
@@ -1988,8 +1989,8 @@ void wifi()
       rssi = RSSIasQuality();
     }
     mac = WiFi.macAddress();
-    const char *wifi_menu[] = {"SSID: ", "IP:", "MAC:", "RSSI: ", "Disconnect", "Back"};
-    String infor[] = {WiFi.SSID(), ConverIpToString(ip), mac, rssi};
+    const char *wifi_menu[] = {"SSID: ", "IP:", "RSSI: ", "Disconnect", "Back"};
+    String infor[] = {WiFi.SSID(), ConverIpToString(ip), rssi};
     spr.fillScreen(TFT_BLACK);
     spr.setTextColor(TFT_WHITE);
     spr.setTextSize(2);
@@ -2007,31 +2008,34 @@ void wifi()
     if (startWifiIndex < 0)
     {
       startWifiIndex = 0;
-      endWifiIndex = 5;
+      endWifiIndex = 4;
     }
-    else if (endWifiIndex >= 6)
+    else if (endWifiIndex >= 4)
     {
-      endWifiIndex = 5;
-      startWifiIndex = endWifiIndex - 5;
+      endWifiIndex = 4;
+      startWifiIndex = endWifiIndex - 4;
     }
-    spr.setFreeFont(TAHOMA);
-    spr.setTextSize(1);
-    spr.setTextColor(TFT_WHITE);
+
     for (int i = startWifiIndex; i <= endWifiIndex; i++)
     {
-      spr.setTextSize(2);
       if (i == wifiMenu_choose)
       {
-        spr.drawRoundRect(2, (i - startWifiIndex) * 34 + 40, 230, 12, 3, TFT_WHITE);
+        if (i > 2)
+        {
+          spr.drawRoundRect(10, (i - startWifiIndex) * 33 + 30, spr.textWidth(wifi_menu[i]) + 5, 25, 4, TFT_WHITE);
+        }
+        else
+        {
+          spr.drawRoundRect(10, (i - startWifiIndex) * 33 + 30, spr.textWidth(wifi_menu[i]) + spr.textWidth(infor[i]) + 5, 25, 4, TFT_WHITE);
+        }
       }
-      spr.drawString(wifi_menu[i], 7, (i - startWifiIndex) * 34 + 42);
-      if (i > 3)
+      spr.drawString(wifi_menu[i], 14, (i - startWifiIndex) * 33 + 35);
+      if (i > 2)
       {
         continue;
       }
-      // spr.setCursor(strlen(wifi_menu[i]) * 3 + 43, (i - startWifiIndex) * 34 + 42);
-      // spr.print(infor[i]);
-      spr.drawString(infor[i],spr.textWidth(wifi_menu[i])+10,(i - startWifiIndex) * 34 + 42);
+
+      spr.drawString(infor[i], spr.textWidth(wifi_menu[i]) + 5, (i - startWifiIndex) * 33 + 35);
     }
     spr.pushSprite(0, 0);
   }
