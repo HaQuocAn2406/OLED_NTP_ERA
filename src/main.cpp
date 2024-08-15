@@ -21,7 +21,8 @@
 #include "bitmap.h"
 #include "Free_Fonts.h"
 #include "icon.h"
-
+#include "tahoma10pt7b.h"
+#define TAHOMA &tahoma10pt7b
 #define ENCODER_CLK 25
 #define ENCODER_DT 26
 #define ENCODER_SW 27
@@ -2013,6 +2014,9 @@ void wifi()
       endWifiIndex = 5;
       startWifiIndex = endWifiIndex - 5;
     }
+    spr.setFreeFont(TAHOMA);
+    spr.setTextSize(1);
+    spr.setTextColor(TFT_WHITE);
     for (int i = startWifiIndex; i <= endWifiIndex; i++)
     {
       spr.setTextSize(2);
