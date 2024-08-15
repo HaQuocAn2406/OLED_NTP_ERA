@@ -15,14 +15,13 @@
 #include <SPI.h>
 #include <DHTesp.h>
 #include <time.h>
-#include "nhietke.h"
-#include "FreeSans10pt7b.h"
 #include <JPEGDecoder.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "bitmap.h"
-#include "FreeMono10pt7b.h"
+#include "Free_Fonts.h"
 #include "icon.h"
+
 #define ENCODER_CLK 25
 #define ENCODER_DT 26
 #define ENCODER_SW 27
@@ -31,6 +30,7 @@
 #define ENCODER_STEPS 4
 #define DHTPIN 5
 #define minimum(a, b) (((a) < (b)) ? (a) : (b))
+#define sun image_weather_sun_bits
 // #define SH110X
 bool screen = false;
 #ifdef SH110X
@@ -66,7 +66,7 @@ String lon = "106.7074488";
 const char *daysOfTheWeek[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 const char *monthOfTheYear[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"};
 char SSID_AP[] = {"ERA"};
-String menus[] = {"Date/Time", "WiFi", "Calib", "Chip Temperature", "Hard Reset", "Back"};
+String menus[] = {"Date/Time", "WiFi", "Alarm", "Calib DHT", "Hard Reset", "Back"};
 // float list[]={-12,-11,-10,-9.5,-9,-8,-7,-6,-5,-4,-3,-2.5,-2,-1,0,1,2,3,3.5,4,
 // 4.5,5,5.5,5.75,6,6.5,7,8,8.75,9,9.5,10,10.5,11,12,12.75,13,14};
 int list[] = {-12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
@@ -117,6 +117,7 @@ int settime_menuIndex = 0;
 int currentRotaryValue;
 int previousRotaryValue;
 int wifiMenu_choose = 0;
+int id;
 float offset = 0.00;
 float _offset;
 float nhietdo;
@@ -167,7 +168,7 @@ void set_time();
 void region();
 void calib();
 void hard_reset();
-void Chip_Temp();
+void Alarm();
 void wifi();
 void hienthi();
 void weather_screen();
@@ -314,7 +315,6 @@ void get_openweather()
 {
 
   HTTPClient http;
-
   // Set HTTP Request Final URL with Location and API key information
   http.begin(URL + "lat=" + lat + "&lon=" + lon + "&units=metric&appid=" + API_KEY + "&lang=en");
 
@@ -324,29 +324,26 @@ void get_openweather()
   // httpCode will be negative on error
   if (httpCode > 0)
   {
-
     // Read Data as a JSON string
     String JSON_Data = http.getString();
     Serial.println(JSON_Data);
-
     // Retrieve some information about the weather from the JSON format
     JsonDocument doc;
     deserializeJson(doc, JSON_Data);
     JsonObject obj = doc.as<JsonObject>();
-
     // Display the Current Weather Info
     temp_outside = obj["main"]["temp"].as<float>();
     humi_outside = obj["main"]["humidity"].as<float>();
     weather = obj["weather"][0]["description"].as<String>();
     location = obj["name"].as<String>();
     icon_id = obj["weather"][0]["icon"].as<String>();
+    id = obj["weather"][0]["id"].as<int>();
     Serial.println(weather);
   }
   else
   {
     Serial.println("Error!");
   }
-
   http.end();
 }
 void loop()
@@ -376,7 +373,7 @@ void loop()
     nhietdo = temperatureRead();
     second_count++;
     batt_get(&batt);
-    if (ERa_CONNECTED == false)
+    if (ERa_CONNECTED == false || auto_time_mode == false)
       time_calculate(current_time);
     if (second_count == 300)
     {
@@ -514,11 +511,11 @@ void hienthi()
       case 1:
         wifi();
         break;
-      case 2:
+      case 3:
         calib();
         break;
-      case 3:
-        Chip_Temp();
+      case 2:
+        Alarm();
         break;
       case 4:
         hard_reset();
@@ -572,6 +569,7 @@ void weather_screen()
 {
   if (icon_id == "01d")
   {
+
     drawArrayJpeg(_01d, sizeof(_01d), 50, 50);
   }
   else if (icon_id == "01n")
@@ -841,8 +839,40 @@ void maindisplay()
   spr.drawString("%", 146 + spr.textWidth((String)humi_outside) - 38 + 6, 138);
   spr.drawBitmap(125, 161, image_weather_temperature_bits, 16, 16, 0xFAAA);
   spr.drawFloat(temp_outside, 1, 146, 163);
-  spr.drawBitmap(2, 209, image_weather_cloud_sunny_bits, 17, 16, 0xFFFF);
-  // tft.setFreeFont(&FreeMono10pt7b);
+  if (id >= 200 && id <= 232)
+  {
+    spr.drawBitmap(3, 211, image_weather_cloud_lightning_bolt_bits, 17, 16, 0x37E);
+  }
+  else if (id >= 300 && id <= 521)
+  {
+    spr.drawBitmap(3, 211, image_weather_cloud_rain_bits, 17, 16, 0x57FF);
+  }
+  else if (id == 800)
+  {
+    if (icon_id == "01d")
+    {
+      spr.drawBitmap(3, 211, image_weather_sun_bits, 15, 16, 0xFFEA);
+    }
+    else if (icon_id == "01n")
+    {
+      spr.drawBitmap(3, 211, image_moon_bits, 16, 16, 0xFFFF);
+    }
+  }
+  else if (id == 801)
+  {
+    if (icon_id == "02d")
+    {
+      spr.drawBitmap(3, 211, image_weather_cloud_sunny_bits, 17, 16, 0xFFEA);
+    }
+    else if (icon_id == "02n")
+    {
+      spr.drawBitmap(3, 211, image_cloud_3_bits, 17, 16, 0xFFEA);
+    }
+  }
+  else if (id >= 802 && id <= 804)
+  {
+    spr.drawBitmap(3, 211, image_cloud_3_bits, 17, 16, 0xFFEA);
+  }
   spr.drawString(weather, 22, 209);
   spr.drawString(location, 24, 194);
   spr.drawString(daysOfTheWeek[DoW], 28, 80);
@@ -1151,15 +1181,15 @@ void handle_rotary_button()
     if (!lastTimeButtonDown)
     {
       lastTimeButtonDown = millis();
-      click_time++;
-      if (millis() - doubleClickMillis <= 500)
-      {
-        doubleClickMillis = millis();
-        Serial.println("DoubleClick");
-        click_time = 0;
-      }
-      if (click_time > 1)
-        click_time = 0;
+      // click_time++;
+      // if (millis() - doubleClickMillis <= 500)
+      // {
+      //   doubleClickMillis = millis();
+      //   Serial.println("DoubleClick");
+      //   click_time = 0;
+      // }
+      // if (click_time > 1)
+      //   click_time = 0;
     }
     if (!isLongpress && (millis() - lastTimeButtonDown >= longPressAfterMiliseconds) && sub_menu_flag)
     {
@@ -1255,7 +1285,7 @@ void handle_rotary_button()
           spr.setTextSize(3);
           spr.drawString("Saving", 18, 92);
           spr.pushSprite(0, 0);
-          xpos = 130;
+          xpos = 110;
           for (int i = 0; i <= 4; i++)
           {
             xpos += 20;
@@ -1532,6 +1562,7 @@ void time_setting()
   spr.setTextColor(TFT_WHITE);
   spr.setTextSize(2);
   spr.drawString("Time Setting", 46, 12);
+  spr.setTextColor(0x4208);
   if (rotatingDown)
   {
     startTimeIndex = time_menuIndex - 3;
@@ -1554,12 +1585,25 @@ void time_setting()
   }
   for (int i = startTimeIndex; i <= endTimeIndex; i++)
   {
-    spr.drawString(time_menu[i], 14, (i - startTimeIndex) * 33 + 33);
-    spr.drawString(mode[auto_time_mode], spr.textWidth(time_menu[1]) + 10, (1 - startTimeIndex) * 33 + 33);
-    if (i == time_menuIndex)
+    if (time_menuIndex == 1)
     {
-      spr.drawRoundRect(10, (i - startTimeIndex) * 33 + 30, 200, 25, 4, TFT_WHITE);
+      spr.drawRoundRect(10, (1 - startTimeIndex) * 33 + 30, spr.textWidth(time_menu[1]) + spr.textWidth(mode[auto_time_mode]) + 5, 25, 4, TFT_WHITE);
+      spr.setTextColor(TFT_WHITE);
+      spr.drawString(time_menu[1], 14, (1 - startTimeIndex) * 33 + 35);
+      spr.drawString(mode[auto_time_mode], spr.textWidth(time_menu[1]) + 5, (1 - startTimeIndex) * 33 + 35);
+      spr.setTextColor(0x4208);
     }
+    else if (i == time_menuIndex)
+    {
+      spr.drawRoundRect(10, (i - startTimeIndex) * 33 + 30, spr.textWidth(time_menu[i]) + 5, 25, 4, TFT_WHITE);
+      spr.setTextColor(TFT_WHITE);
+    }
+    else
+    {
+      spr.setTextColor(0x4208);
+      spr.drawString(mode[auto_time_mode], spr.textWidth(time_menu[1]) + 3, (1 - startTimeIndex) * 33 + 35);
+    }
+    spr.drawString(time_menu[i], 14, (i - startTimeIndex) * 33 + 35);
   }
   spr.pushSprite(0, 0);
 #endif
@@ -1758,7 +1802,7 @@ void hard_reset()
   spr.pushSprite(0, 0);
 #endif
 }
-void Chip_Temp()
+void Alarm()
 {
 #ifdef SH110X
   display.clearDisplay();
@@ -1772,6 +1816,15 @@ void Chip_Temp()
   display.drawBitmap(2, 11, image_weather_temperature_bits, 16, 16, 1);
   display.display();
 #else
+  spr.fillScreen(TFT_BLACK);
+  spr.setTextColor(TFT_WHITE);
+  spr.setTextSize(1);
+  spr.drawString("Developing.....", 50, 50);
+  spr.pushSprite(0, 0);
+  delay(3000);
+  sub_menu_flag = false;
+  displayMenu();
+  return;
   // static const unsigned char PROGMEM image_weather_temperature_bits[] = {0x1c,0x00,0x22,0x02,0x2b,0x05,0x2a,0x02,0x2b,0x38,0x2a,
   // 0x60,0x2b,0x40,0x2a,0x40,0x2a,0x60,0x49,0x38,0x9c,0x80,0xae,0x80,0xbe,0x80,0x9c,0x80,0x41,0x00,0x3e,0x00};
   // display.clearDisplay();
@@ -1962,7 +2015,7 @@ void wifi()
     }
     for (int i = startWifiIndex; i <= endWifiIndex; i++)
     {
-      spr.setTextSize(1);
+      spr.setTextSize(2);
       if (i == wifiMenu_choose)
       {
         spr.drawRoundRect(2, (i - startWifiIndex) * 34 + 40, 230, 12, 3, TFT_WHITE);
@@ -1972,8 +2025,9 @@ void wifi()
       {
         continue;
       }
-      spr.setCursor(strlen(wifi_menu[i]) * 3 + 43, (i - startWifiIndex) * 34 + 42);
-      spr.print(infor[i]);
+      // spr.setCursor(strlen(wifi_menu[i]) * 3 + 43, (i - startWifiIndex) * 34 + 42);
+      // spr.print(infor[i]);
+      spr.drawString(infor[i],spr.textWidth(wifi_menu[i])+10,(i - startWifiIndex) * 34 + 42);
     }
     spr.pushSprite(0, 0);
   }
