@@ -18,6 +18,10 @@
 #include <JPEGDecoder.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <ElegantOTA.h>
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WebServer.h>
 #include "bitmap.h"
 #include "Free_Fonts.h"
 #include "icon.h"
@@ -54,7 +58,7 @@ byte x2colon = 0;
 DHTesp dht;
 ERaEspTime syncTime;
 TimeElement_t ntpTime;
-
+WebServer server(80);
 AiEsp32RotaryEncoder rotaryEncoder(ENCODER_CLK, ENCODER_DT, ENCODER_SW);
 
 String URL = "http://api.openweathermap.org/data/2.5/weather?";
@@ -214,11 +218,17 @@ void timerEvent()
 void TaskEra(void *parameters)
 {
   Serial.println("ERa Started");
-  ERa.setScanWiFi(true);
-  /* Initializing the ERa library. */
+  const char *ssid = "Pass=S^2MQT";
+  const char *password = "12345678";
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  // ERa.setScanWiFi(true);
+  // /* Initializing the ERa library. */
   ERa.begin();
-  /* Setup timer called function every second */
+  // /* Setup timer called function every second */
   ERa.addInterval(1000L, timerEvent);
+  ElegantOTA.begin(&server);
+  server.begin(ssid, password);
   for (;;)
   {
     ERa.run();
@@ -350,6 +360,8 @@ void get_openweather()
 }
 void loop()
 {
+  server.handleClient();
+  ElegantOTA.loop();
   rotary_loop();
   hienthi();
   temp_room = dht.getTemperature() + offset;
