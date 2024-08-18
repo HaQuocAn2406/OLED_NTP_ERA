@@ -20,6 +20,7 @@
 #include <ArduinoJson.h>
 #include <ElegantOTA.h>
 #include <WiFi.h>
+#include <WiFiManager.h>
 #include <WiFiClient.h>
 #include <WebServer.h>
 #include "bitmap.h"
@@ -58,9 +59,8 @@ byte x2colon = 0;
 DHTesp dht;
 ERaEspTime syncTime;
 TimeElement_t ntpTime;
-WebServer server(80);
 AiEsp32RotaryEncoder rotaryEncoder(ENCODER_CLK, ENCODER_DT, ENCODER_SW);
-
+WebServer server(80);
 String URL = "http://api.openweathermap.org/data/2.5/weather?";
 /// @brief eb1d2c68ab206e3e4ecf26becc7ddc9c
 String API_KEY = "eb1d2c68ab206e3e4ecf26becc7ddc9c";
@@ -83,9 +83,8 @@ int list[] = {-12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 
 String region_list[] = {"UTC-12", "UTC-11", "UTC-10", "UTC-9", "UTC-8", "UTC-7", "UTC-6", "UTC-5",
                         "UTC-4", "UTC-3", "UTC-2", "UTC-1", "UTC", "UTC+1", "UTC+2", "UTC+3", "UTC+4",
                         "UTC+5", "UTC+6", "UTC+7", "UTC+8", "UTC+9", "UTC+10", "UTC+11", "UTC+12", "UTC+13", "UTC+14"};
-
 String rssi;
-String location = "VIET NAM";
+String location = "Hello";
 int16_t DoW;
 int16_t months = 0;
 uint16_t years = 1970;
@@ -151,15 +150,6 @@ unsigned int changemode = 0;
 unsigned int changemode_auto_time = 0;
 unsigned long current_time = -25200;
 long prevMillis = 0, prevMillis_client = 0;
-// class defaul_setting:
-// {
-// private:
-//   int utc = 19;
-//   int16_t DoW=0;
-//   int16_t months = 0;
-//   uint16_t years = 1970;
-//   uint16_t days = 1;
-// }
 String result;
 String weather;
 String icon_id;
@@ -184,7 +174,8 @@ void connect_succes();
 void get_openweather();
 void time_calculate(unsigned long current_time);
 int batt_get();
-
+void updating();
+void updating_done(bool success);
 void batt_get(int *batt)
 {
   int lower = 1;
@@ -201,6 +192,10 @@ ERA_CONNECTED()
 {
   ERA_LOG("ERa", "ERa connected!");
   Serial.println("ERa connected!");
+  ElegantOTA.begin(&server);
+  server.begin();
+  // ElegantOTA.onStart(updating);
+  // ElegantOTA.onEnd(updating_done);
   ERa_CONNECTED = true;
   auto_time_mode = true;
 }
@@ -211,26 +206,49 @@ ERA_DISCONNECTED()
   Serial.println("ERa disconnected!");
   ERa_CONNECTED = false;
 }
+// void updating(){
+//   spr.fillSprite(TFT_BLACK);
+//   spr.setTextSize(2);
+//   spr.drawString("Updating....",20,50);
+// }
+// void updating_done(bool success){
+//   spr.fillSprite(TFT_BLACK);
+//   spr.setTextSize(2);
+//   spr.drawString("Done",20,50);
+// }
 void timerEvent()
 {
   ERA_LOG("Timer", "Uptime: %d", ERaMillis() / 1000L);
 }
 void TaskEra(void *parameters)
 {
-  Serial.println("ERa Started");
-  const char *ssid = "Pass=S^2MQT";
-  const char *password = "12345678";
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  // ERa.setScanWiFi(true);
-  // /* Initializing the ERa library. */
+  // long prev_time = 0;
+  Serial.println("E-Ra Task Started");
+  // WiFi.mode(WIFI_STA);
+  // wm.setConfigPortalBlocking(false);
+  // wm.setConfigPortalTimeout(60);
+
+  // if (wm.autoConnect("AutoConnectAP"))
+  // {
+  //   Serial.println("connected...yeey :)");
+  // }
+  // else
+  // {
+  //   Serial.println("Configportal running");
+  // }
+  // wifi_ap_record_t in4;
+  // wifi_config_t conf_pass;
+  // ssid = reinterpret_cast<char *>(in4.ssid);
+  // password = reinterpret_cast<char *>(conf_pass.sta.password);
+  // WiFi.mode(WIFI_STA);
+  // WiFi.begin(ssid, password);
+  ERa.setScanWiFi(true);
+  ERa.setPersistent(true);
   ERa.begin();
-  // /* Setup timer called function every second */
-  ERa.addInterval(1000L, timerEvent);
-  ElegantOTA.begin(&server);
-  server.begin(ssid, password);
+  // ERa.addInterval(1000L, timerEvent);
   for (;;)
   {
+
     ERa.run();
     syncTime.setTimeZone(list[utc]);
     syncTime.getTime(ntpTime);
@@ -360,8 +378,11 @@ void get_openweather()
 }
 void loop()
 {
-  server.handleClient();
-  ElegantOTA.loop();
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    server.handleClient();
+    ElegantOTA.loop();
+  }
   rotary_loop();
   hienthi();
   temp_room = dht.getTemperature() + offset;
@@ -548,35 +569,36 @@ void hienthi()
   else // Hiển thị màn hình chính
   {
 
-    // maindisplay();
-    // sub_menu_flag = false;
-    // setting_menuIndex = 0;
-    if (WiFi.status() == WL_CONNECTED)
-    {
-      if (millis() - prevMillis >= 3000)
-      {
-        prevMillis = millis();
-        screen = !screen;
-      }
-      if (screen)
-      {
-        maindisplay();
-        sub_menu_flag = false;
-        setting_menuIndex = 0;
-      }
-      else
-      {
-        spr.fillScreen(TFT_BLACK);
-        weather_screen();
-        spr.pushSprite(0, 0);
-      }
-    }
-    else
-    {
-      maindisplay();
-      sub_menu_flag = false;
-      setting_menuIndex = 0;
-    }
+    maindisplay();
+    sub_menu_flag = false;
+    setting_menuIndex = 0;
+    //   if (WiFi.status() == WL_CONNECTED)
+    //   {
+    //     if (millis() - prevMillis >= 3000)
+    //     {
+    //       prevMillis = millis();
+    //       screen = !screen;
+    //     }
+    //     if (screen)
+    //     {
+    //       maindisplay();
+    //       sub_menu_flag = false;
+    //       setting_menuIndex = 0;
+    //     }
+    //     else
+    //     {
+    //       spr.fillScreen(TFT_BLACK);
+    //       weather_screen();
+    //       spr.pushSprite(0, 0);
+    //     }
+    //   }
+    //   else
+    //   {
+    //     maindisplay();
+    //     sub_menu_flag = false;
+    //     setting_menuIndex = 0;
+    //   }
+    // }
   }
 }
 void weather_screen()
