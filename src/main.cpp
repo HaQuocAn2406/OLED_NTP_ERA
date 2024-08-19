@@ -167,9 +167,11 @@ void hard_reset();
 void Alarm();
 void wifi();
 void hienthi();
+#ifndef SH110X
 void weather_screen();
 void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int ypos);
 void renderJPEG(int xpos, int ypos);
+#endif
 void connect_succes();
 void get_openweather();
 void time_calculate(unsigned long current_time);
@@ -222,12 +224,10 @@ void timerEvent()
 }
 void TaskEra(void *parameters)
 {
-  // long prev_time = 0;
   Serial.println("E-Ra Task Started");
   // WiFi.mode(WIFI_STA);
   // wm.setConfigPortalBlocking(false);
   // wm.setConfigPortalTimeout(60);
-
   // if (wm.autoConnect("AutoConnectAP"))
   // {
   //   Serial.println("connected...yeey :)");
@@ -248,67 +248,11 @@ void TaskEra(void *parameters)
   // ERa.addInterval(1000L, timerEvent);
   for (;;)
   {
-
     ERa.run();
     syncTime.setTimeZone(list[utc]);
     syncTime.getTime(ntpTime);
   }
 }
-// class thoigian
-// {
-// private:
-//   int hours, minutes, seconds;
-//   String Weekdays;
-//   int days, years;
-//   String Months;
-
-// public:
-//   thoigian(int hours, int minutes, int seconds, int days, int years, String Weekdays = "Sun", String Months = "Jan");
-//   void setHours(int hours)
-//   {
-//     this->hours = hours;
-//   }
-//   void setMinutes(int minutes)
-//   {
-//     this->minutes = minutes;
-//   }
-//   void setSeconds(int seconds)
-//   {
-//     this->seconds = seconds;
-//   }
-//   void setDay(int days)
-//   {
-//     this->days = days;
-//   }
-//   void setWeekdays(String Weekdays)
-//   {
-//     this->Weekdays = Weekdays;
-//   }
-//   void setMonths(String Months)
-//   {
-//     this->Months = Months;
-//   }
-//   void setYears(int years)
-//   {
-//     this->years = years;
-//   }
-//   int getHours()
-//   {
-//     return this->hours;
-//   }
-//   int getMinutes()
-//   {
-//     return this->minutes;
-//   }
-//   int getSeconds()
-//   {
-//     return this->seconds;
-//   }
-//   String getWeekDays()
-//   {
-//     return this->Weekdays;
-//   }
-// };
 
 void setup()
 {
@@ -601,6 +545,7 @@ void hienthi()
     // }
   }
 }
+#ifndef SH110X
 void weather_screen()
 {
   if (icon_id == "01d")
@@ -755,6 +700,7 @@ void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int
   JpegDec.decodeArray(arrayname, array_size);
   renderJPEG(x, y);
 }
+#endif
 ///////////////////// Main Screen ///////////////////////////////////////////////
 void maindisplay()
 {
@@ -805,7 +751,6 @@ void maindisplay()
   display.setCursor(19, 8);
   display.print(temp_room);
   display.display();
-  // }
 #else
   spr.fillScreen(TFT_BLACK);
   if (batt > 83)
@@ -910,7 +855,7 @@ void maindisplay()
     spr.drawBitmap(3, 211, image_cloud_3_bits, 17, 16, 0xFFEA);
   }
   spr.drawString(weather, 22, 209);
-  spr.drawString(location, 24, 194);
+  spr.drawString(location, 3, 194);
   spr.drawString(daysOfTheWeek[DoW], 28, 80);
   spr.drawNumber(days, 79, 80);
   spr.drawString(monthOfTheYear[months], 112, 80);
@@ -1258,7 +1203,9 @@ void handle_rotary_button()
         Serial.println("Setting Press");
         setting_menu_flag = !setting_menu_flag;
         isSettingpress = true;
+#ifndef SH110X
         spr.fillScreen(TFT_BLACK);
+#endif
       }
     }
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1315,6 +1262,7 @@ void handle_rotary_button()
             display.print("SAVED");
             display.display();
           }
+
 #else
           spr.fillScreen(TFT_BLACK);
           spr.setTextColor(0xFFFF);
@@ -1482,6 +1430,51 @@ void set_time()
       time_setting();
       return;
     }
+#ifdef SH110X
+    if (rotatingDown)
+    {
+      startsetTimeIndex = settime_menuIndex - 2;
+      endsetTimeIndex = settime_menuIndex + 1;
+    }
+    else
+    {
+      startsetTimeIndex = settime_menuIndex - 1;
+      endsetTimeIndex = settime_menuIndex + 2;
+    }
+    if (startsetTimeIndex < 0)
+    {
+      startsetTimeIndex = 0;
+      endsetTimeIndex = 3;
+    }
+    else if (endsetTimeIndex >= 7)
+    {
+      endsetTimeIndex = 6;
+      startsetTimeIndex = endsetTimeIndex - 3;
+    }
+    for (int i = startsetTimeIndex; i <= endsetTimeIndex; i++)
+    {
+      display.setCursor(6, (i - startsetTimeIndex) * 12 + 13);
+      if (i == settime_menuIndex)
+      {
+        if (clicked == 1 && i <= 5)
+        {
+          display.drawRoundRect(strlen(settime_menu[i]) * 5 + 12, (i - startsetTimeIndex) * 12 + 11, strlen(rs[i]) * 5 + 10, 12, 3, SH110X_WHITE);
+        }
+        else
+        {
+          display.drawRoundRect(0, (i - startsetTimeIndex) * 12 + 11, 120, 12, 3, SH110X_WHITE);
+        }
+      }
+      display.print(settime_menu[i]);
+      if (i > 5)
+      {
+        continue;
+      }
+      display.setCursor(strlen(settime_menu[i]) * 5 + 15, (i - startsetTimeIndex) * 12 + 13);
+      display.print(rs[i]);
+    }
+    display.display();
+#else
     if (rotatingDown)
     {
       startsetTimeIndex = settime_menuIndex - 4;
@@ -1523,9 +1516,9 @@ void set_time()
         continue;
       }
       spr.drawString(rs[i], spr.textWidth(settime_menu[i]) + 10, (i - startsetTimeIndex) * 28 + 37);
-      // spr.pushSprite(0, 0);
     }
     spr.pushSprite(0, 0);
+#endif
   }
 }
 void time_setting()
@@ -1742,7 +1735,7 @@ void hard_reset()
 {
 #ifdef SH110X
   String choose[] = {"No", "Yes"};
-  // display.clearDisplay();
+  display.clearDisplay();
   display.fillScreen(TFT_BLACK);
   display.setTextColor(TFT_WHITE);
   display.setCursor(16, 8);
@@ -1841,16 +1834,14 @@ void hard_reset()
 void Alarm()
 {
 #ifdef SH110X
-  display.clearDisplay();
-  display.setTextColor(TFT_WHITE);
-  display.setTextSize(1);
-  display.setCursor(21, 15);
-  display.print("Chip Temperature");
-  display.setTextSize(2);
-  display.setCursor(36, 34);
-  display.print(nhietdo);
-  display.drawBitmap(2, 11, image_weather_temperature_bits, 16, 16, 1);
-  display.display();
+  // display.clearDisplay();
+  // display.setTextColor(TFT_WHITE);
+  // display.setTextSize(1);
+  // display.setCursor(21, 15);
+  // display.print("Developing.....");
+  // display.display();
+  delay(2000);
+  return;
 #else
   spr.fillScreen(TFT_BLACK);
   spr.setTextColor(TFT_WHITE);
@@ -1861,18 +1852,6 @@ void Alarm()
   sub_menu_flag = false;
   displayMenu();
   return;
-  // static const unsigned char PROGMEM image_weather_temperature_bits[] = {0x1c,0x00,0x22,0x02,0x2b,0x05,0x2a,0x02,0x2b,0x38,0x2a,
-  // 0x60,0x2b,0x40,0x2a,0x40,0x2a,0x60,0x49,0x38,0x9c,0x80,0xae,0x80,0xbe,0x80,0x9c,0x80,0x41,0x00,0x3e,0x00};
-  // display.clearDisplay();
-  // display.setTextColor(TFT_WHITE);
-  // display.setTextSize(1);
-  // display.setCursor(21, 15);
-  // display.print("Chip Temperature");
-  // display.setTextSize(2);
-  // display.setCursor(36, 34);
-  // display.print(nhietdo);
-  // display.drawBitmap(2, 11, image_weather_temperature_bits, 16, 16, 1);
-  // display.display();
 #endif
 }
 String ConverIpToString(IPAddress ip)
