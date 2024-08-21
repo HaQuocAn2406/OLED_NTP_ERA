@@ -19,6 +19,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <ElegantOTA.h>
+#include <otadrive_esp.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <WiFiClient.h>
@@ -27,7 +28,11 @@
 #include "Free_Fonts.h"
 #include "icon.h"
 #include "tahoma10pt7b.h"
-// #define GFXFF 1
+
+#define APIKEY "b182dce6-64e4-4650-972c-588489ec0fcc"
+// this app version
+#define FW_VER "v@1.2.19"
+
 #define TAHOMA &tahoma10pt7b
 #define ENCODER_CLK 25
 #define ENCODER_DT 26
@@ -36,6 +41,7 @@
 #define FLASH_MEMORY_SIZE 200
 #define ENCODER_STEPS 4
 #define DHTPIN 5
+#define VBAT_PIN 35
 #define minimum(a, b) (((a) < (b)) ? (a) : (b))
 #define sun image_weather_sun_bits
 // #define SH110X
@@ -60,11 +66,12 @@ DHTesp dht;
 ERaEspTime syncTime;
 TimeElement_t ntpTime;
 AiEsp32RotaryEncoder rotaryEncoder(ENCODER_CLK, ENCODER_DT, ENCODER_SW);
-WebServer server(80);
+// WebServer server(80);
 String URL = "http://api.openweathermap.org/data/2.5/weather?";
 /// @brief eb1d2c68ab206e3e4ecf26becc7ddc9c
 String API_KEY = "eb1d2c68ab206e3e4ecf26becc7ddc9c";
 WiFiClient client;
+WebServer server(80);
 // THU DUC //
 String lat = "10.8201506";
 String lon = "106.7074488";
@@ -84,7 +91,7 @@ String region_list[] = {"UTC-12", "UTC-11", "UTC-10", "UTC-9", "UTC-8", "UTC-7",
                         "UTC-4", "UTC-3", "UTC-2", "UTC-1", "UTC", "UTC+1", "UTC+2", "UTC+3", "UTC+4",
                         "UTC+5", "UTC+6", "UTC+7", "UTC+8", "UTC+9", "UTC+10", "UTC+11", "UTC+12", "UTC+13", "UTC+14"};
 String rssi;
-String location = "Hello";
+String location = "Viet Nam";
 int16_t DoW;
 int16_t months = 0;
 uint16_t years = 1970;
@@ -178,11 +185,28 @@ void time_calculate(unsigned long current_time);
 int batt_get();
 void updating();
 void updating_done(bool success);
+void onUpdateProgress(int progress, int totalt);
+void onUpdateProgress(int progress, int totalt)
+{
+  static int last = 0;
+  int progressPercent = (100 * progress) / totalt;
+  spr.fillSprite(TFT_BLACK);
+  spr.setTextSize(2);
+  spr.drawString("Updating: ", 20, 50);
+  Serial.print("*");
+  if (last != progressPercent && progressPercent % 10 == 0)
+  {
+    // print every 10%
+    spr.drawString(progressPercent + "%", spr.textWidth("Updating:"), 50);
+    Serial.printf("%d", progressPercent);
+  }
+  last = progressPercent;
+}
 void batt_get(int *batt)
 {
   int lower = 1;
   int upper = 100;
-  *batt = (rand() % (upper - lower + 1)) + lower;
+  *batt = analogRead(VBAT_PIN);
   // Serial.println(batt);
 }
 void IRAM_ATTR readEncoderISR()
@@ -259,6 +283,10 @@ void setup()
   Serial.begin(115200);
   syncTime.begin();
   dht.setup(DHTPIN, DHTesp::DHT11);
+
+  OTADRIVE.setInfo(APIKEY, FW_VER);
+  OTADRIVE.onUpdateFirmwareProgress(onUpdateProgress);
+
 #ifdef SH110X
   display.begin(i2c_Address, true); // Address 0x3C default
   display.display();
@@ -322,6 +350,22 @@ void get_openweather()
 }
 void loop()
 {
+  if (OTADRIVE.timeTick(30))
+  {
+    // retrive firmware info from OTAdrive server
+    auto inf = OTADRIVE.updateFirmwareInfo();
+
+    // update firmware if newer available
+    if (inf.available)
+    {
+      log_d("\nNew version available, %dBytes, %s\n", inf.size, inf.version.c_str());
+      OTADRIVE.updateFirmware();
+    }
+    else
+    {
+      log_d("\nNo newer version\n");
+    }
+  }
   if (WiFi.status() == WL_CONNECTED)
   {
     server.handleClient();
