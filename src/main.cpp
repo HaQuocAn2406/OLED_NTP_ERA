@@ -31,7 +31,7 @@
 
 #define APIKEY "b182dce6-64e4-4650-972c-588489ec0fcc"
 // this app version
-#define FW_VER "v@1.2.19"
+#define FW_VER "v@1.2.20"
 
 #define TAHOMA &tahoma10pt7b
 #define ENCODER_CLK 25
@@ -68,6 +68,7 @@ TimeElement_t ntpTime;
 AiEsp32RotaryEncoder rotaryEncoder(ENCODER_CLK, ENCODER_DT, ENCODER_SW);
 // WebServer server(80);
 String URL = "http://api.openweathermap.org/data/2.5/weather?";
+String URL_2 = "https://api.openweathermap.org/data/2.5/forecast?";
 /// @brief eb1d2c68ab206e3e4ecf26becc7ddc9c
 String API_KEY = "eb1d2c68ab206e3e4ecf26becc7ddc9c";
 WiFiClient client;
@@ -79,7 +80,7 @@ String lon = "106.7074488";
 const char *daysOfTheWeek[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 const char *monthOfTheYear[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"};
 char SSID_AP[] = {"ERA"};
-String menus[] = {"Date/Time", "WiFi", "Alarm", "Calib DHT", "Hard Reset", "Back"};
+String menus[] = {"Date/Time", "WiFi", "Update", "Calib DHT", "Hard Reset", "Back"};
 // float list[]={-12,-11,-10,-9.5,-9,-8,-7,-6,-5,-4,-3,-2.5,-2,-1,0,1,2,3,3.5,4,
 // 4.5,5,5.5,5.75,6,6.5,7,8,8.75,9,9.5,10,10.5,11,12,12.75,13,14};
 int list[] = {-12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
@@ -171,7 +172,7 @@ void set_time();
 void region();
 void calib();
 void hard_reset();
-void Alarm();
+void Update_Screen();
 void wifi();
 void hienthi();
 #ifndef SH110X
@@ -180,34 +181,18 @@ void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int
 void renderJPEG(int xpos, int ypos);
 #endif
 void connect_succes();
-void get_openweather();
+void get_Current_Weather();
 void time_calculate(unsigned long current_time);
 int batt_get();
 void updating();
 void updating_done(bool success);
 void onUpdateProgress(int progress, int totalt);
-void onUpdateProgress(int progress, int totalt)
-{
-  static int last = 0;
-  int progressPercent = (100 * progress) / totalt;
-  spr.fillSprite(TFT_BLACK);
-  spr.setTextSize(2);
-  spr.drawString("Updating: ", 20, 50);
-  Serial.print("*");
-  if (last != progressPercent && progressPercent % 10 == 0)
-  {
-    // print every 10%
-    spr.drawString(progressPercent + "%", spr.textWidth("Updating:"), 50);
-    Serial.printf("%d", progressPercent);
-  }
-  last = progressPercent;
-}
 void batt_get(int *batt)
 {
   int lower = 1;
   int upper = 100;
   *batt = analogRead(VBAT_PIN);
-  // Serial.println(batt);
+  Serial.println(*batt);
 }
 void IRAM_ATTR readEncoderISR()
 {
@@ -313,7 +298,7 @@ void setup()
   rotaryEncoder.disableAcceleration();
   xTaskCreatePinnedToCore(TaskEra, "Task Era NTP", 10000, NULL, 1, NULL, 1);
 }
-void get_openweather()
+void get_Current_Weather()
 {
 
   HTTPClient http;
@@ -348,24 +333,43 @@ void get_openweather()
   }
   http.end();
 }
+void get_3DayWeather()
+{
+
+  HTTPClient http;
+  // Set HTTP Request Final URL with Location and API key information
+  http.begin(URL_2 + "lat=" + lat + "&lon=" + lon + "&appid=" + API_KEY);
+
+  // start connection and send HTTP Request
+  int httpCode = http.GET();
+
+  // httpCode will be negative on error
+  if (httpCode > 0)
+  {
+    // Read Data as a JSON string
+    String JSON_Data = http.getString();
+    Serial.println(JSON_Data);
+    // Retrieve some information about the weather from the JSON format
+    JsonDocument doc;
+    deserializeJson(doc, JSON_Data);
+    JsonObject obj = doc.as<JsonObject>();
+    // Display the Current Weather Info
+    temp_outside = obj["main"]["temp"].as<float>();
+    humi_outside = obj["main"]["humidity"].as<float>();
+    weather = obj["weather"][0]["description"].as<String>();
+    location = obj["name"].as<String>();
+    icon_id = obj["weather"][0]["icon"].as<String>();
+    id = obj["weather"][0]["id"].as<int>();
+    Serial.println(weather);
+  }
+  else
+  {
+    Serial.println("Error!");
+  }
+  http.end();
+}
 void loop()
 {
-  if (OTADRIVE.timeTick(30))
-  {
-    // retrive firmware info from OTAdrive server
-    auto inf = OTADRIVE.updateFirmwareInfo();
-
-    // update firmware if newer available
-    if (inf.available)
-    {
-      log_d("\nNew version available, %dBytes, %s\n", inf.size, inf.version.c_str());
-      OTADRIVE.updateFirmware();
-    }
-    else
-    {
-      log_d("\nNo newer version\n");
-    }
-  }
   if (WiFi.status() == WL_CONNECTED)
   {
     server.handleClient();
@@ -378,7 +382,7 @@ void loop()
   if (WiFi.status() == WL_CONNECTED && (millis() - prevMillis_client >= 10000))
   {
     prevMillis_client = millis();
-    get_openweather();
+    get_Current_Weather();
   }
   if (ERa_CONNECTED == true && auto_time_mode == true)
   {
@@ -538,7 +542,7 @@ void hienthi()
         calib();
         break;
       case 2:
-        Alarm();
+        Update_Screen();
         break;
       case 4:
         hard_reset();
@@ -1875,7 +1879,26 @@ void hard_reset()
   spr.pushSprite(0, 0);
 #endif
 }
-void Alarm()
+void onUpdateProgress(int progress, int totalt)
+{
+  spr.fillSprite(TFT_BLACK);
+  static int last = 0;
+  int progressPercent = (100 * progress) / totalt;
+  spr.setTextSize(2);
+  spr.setTextColor(0xFFFF);
+  spr.drawString("New Version Availble", 9, 72);
+  spr.drawString("On Process....", 6, 99);
+  if (last != progressPercent && progressPercent % 10 == 0)
+  {
+    // print every 10%
+    spr.setTextSize(2);
+    spr.drawString(progressPercent + "%", 90, 127);
+    Serial.printf("%d", progressPercent);
+  }
+  last = progressPercent;
+  spr.pushSprite(0, 0);
+}
+void Update_Screen()
 {
 #ifdef SH110X
   // display.clearDisplay();
@@ -1887,15 +1910,57 @@ void Alarm()
   delay(2000);
   return;
 #else
-  spr.fillScreen(TFT_BLACK);
-  spr.setTextColor(TFT_WHITE);
-  spr.setTextSize(1);
-  spr.drawString("Developing.....", 50, 50);
-  spr.pushSprite(0, 0);
-  delay(3000);
-  sub_menu_flag = false;
-  displayMenu();
-  return;
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    spr.fillSprite(TFT_BLACK);
+    spr.setTextSize(2);
+    spr.setTextColor(0xFFFF);
+    spr.drawString("Checking Update", 7, 47);
+    int xpos = 10;
+    for (int i = 0; i < 10; i++)
+    {
+      xpos += 25;
+      spr.drawString(".", xpos, 71);
+      delay(500);
+      spr.pushSprite(0, 0);
+    }
+    auto inf = OTADRIVE.updateFirmwareInfo();
+    // update firmware if newer available
+    if (inf.available)
+    {
+      log_d("\nNew version available, %dBytes, %s\n", inf.size, inf.version.c_str());
+      OTADRIVE.updateFirmware();
+    }
+    else
+    {
+      log_d("\nNo newer version\n");
+      spr.fillSprite(TFT_BLACK);
+      spr.setTextColor(0xFFFF);
+      spr.setTextSize(3);
+      spr.drawString("Nothing New", 23, 44);
+      spr.drawBitmap(92, 83, image_Cry_dolph_bits, 55, 52, 0x57FF);
+      spr.pushSprite(0, 0);
+      delay(3000);
+      sub_menu_flag = false;
+      displayMenu();
+      return;
+    }
+  }
+  else
+  {
+    spr.fillSprite(TFT_BLACK);
+    spr.setTextColor(0xFFFF);
+    spr.setTextColor(0xFFFF);
+    spr.setTextSize(2);
+    spr.drawString("Connect WiFi ", 40, 57);
+    spr.drawString("To Check For Update", 8, 139);
+    spr.drawBitmap(56, 79, image_Scanning_bits, 123, 52, 0xFFFF);
+    spr.pushSprite(0, 0);
+    delay(3000);
+    sub_menu_flag = false;
+    displayMenu();
+    return;
+  }
 #endif
 }
 String ConverIpToString(IPAddress ip)
