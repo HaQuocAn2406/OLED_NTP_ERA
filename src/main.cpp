@@ -66,6 +66,9 @@ DHTesp dht;
 ERaEspTime syncTime;
 TimeElement_t ntpTime;
 AiEsp32RotaryEncoder rotaryEncoder(ENCODER_CLK, ENCODER_DT, ENCODER_SW);
+
+updateInfo inf;
+
 // WebServer server(80);
 String URL = "http://api.openweathermap.org/data/2.5/weather?";
 String URL_2 = "https://api.openweathermap.org/data/2.5/forecast?";
@@ -1886,16 +1889,15 @@ void onUpdateProgress(int progress, int totalt)
   int progressPercent = (100 * progress) / totalt;
   spr.setTextSize(2);
   spr.setTextColor(0xFFFF);
-  spr.drawString("New Version Availble", 9, 72);
+  spr.drawString("New Version Availble", 6, 72);
   spr.drawString("On Process....", 6, 99);
-  if (last != progressPercent && progressPercent % 10 == 0)
-  {
-    // print every 10%
-    spr.setTextSize(2);
-    spr.drawString(progressPercent + "%", 90, 127);
-    Serial.printf("%d", progressPercent);
-  }
+  // if (last != progressPercent && progressPercent % 10 == 0)
+  // {
+  //   // print every 10%
+  //   Serial.printf("%d", progressPercent);
+  // }
   last = progressPercent;
+  spr.drawNumber(progressPercent, 90, 127);
   spr.pushSprite(0, 0);
 }
 void Update_Screen()
@@ -1924,16 +1926,22 @@ void Update_Screen()
       delay(500);
       spr.pushSprite(0, 0);
     }
-    auto inf = OTADRIVE.updateFirmwareInfo();
-    // update firmware if newer available
+    // if (OTADRIVE.timeTick(5))
+    // {
+    inf = OTADRIVE.updateFirmwareInfo();
     if (inf.available)
     {
       log_d("\nNew version available, %dBytes, %s\n", inf.size, inf.version.c_str());
-      OTADRIVE.updateFirmware();
+      while (inf.code == update_result::Success)
+      {
+        OTADRIVE.updateFirmware();
+        Serial.println("Newer version");
+      }
     }
     else
     {
       log_d("\nNo newer version\n");
+      Serial.println("No newer version");
       spr.fillSprite(TFT_BLACK);
       spr.setTextColor(0xFFFF);
       spr.setTextSize(3);
@@ -1945,6 +1953,7 @@ void Update_Screen()
       displayMenu();
       return;
     }
+    // }
   }
   else
   {
