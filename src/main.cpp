@@ -31,9 +31,15 @@
 
 #define APIKEY "b182dce6-64e4-4650-972c-588489ec0fcc"
 // this app version
-#define FW_VER "v@1.2.20"
+#define FW_VER "v@1.2.22"
 
-#define TAHOMA &tahoma10pt7b
+#define MAX_DAYS_FEB 28
+#define MAX_DAYS_OTHER 31
+#define MAX_MONTHS 12
+#define MAX_HOURS 24
+#define MAX_MINUTES 60
+#define MAX_WEEKDAYS 7
+
 #define ENCODER_CLK 25
 #define ENCODER_DT 26
 #define ENCODER_SW 27
@@ -100,14 +106,13 @@ int16_t DoW;
 int16_t months = 0;
 uint16_t years = 1970;
 uint16_t days = 1;
-uint16_t hours, _hours;
-uint16_t minutes, _minutes;
-uint16_t seconds;
-uint16_t oldsecond;
+int8_t hours, _hours;
+int8_t minutes, _minutes;
+uint8_t seconds;
 int batt = 100;
 int clicked = 0;
 bool enable_reset = false;
-bool auto_time_mode = false;
+bool sync_time_mode = false;
 bool auto_region_mode = false;
 bool sub_menu_flag = false;
 bool rotatingDown;
@@ -132,21 +137,20 @@ int time_menuIndex = 0;
 int settime_menuIndex = 0;
 int currentRotaryValue;
 int previousRotaryValue;
-int wifiMenu_choose = 0;
+int wifiMenu_Index = 0;
 int id;
 float offset = 0.00;
-float _offset;
 float nhietdo;
 float humi_room;
 float temp_room;
 float temp_outside, humi_outside;
+
 const int add_hours = 0;
 const int add_minutes = 4;
 const int add_seconds = 8;
 const int add_utc = 16;
 const int add_offset = 20;
 const int add_auto_time = 24;
-unsigned long lastRotaryChange;
 long preRSSI = 0;
 unsigned long lastTimeButtonDown = 0;
 unsigned long shortPressAfterMiliseconds = 50;
@@ -185,16 +189,245 @@ void renderJPEG(int xpos, int ypos);
 #endif
 void connect_succes();
 void get_Current_Weather();
+void get_3DayWeather();
 void time_calculate(unsigned long current_time);
 int batt_get();
 void updating();
 void updating_done(bool success);
 void onUpdateProgress(int progress, int totalt);
+void handleWeekdays(int direction);
+void handleDays(int direction);
+void handleMonths(int direction);
+void handleYears(int direction);
+void handleHours(int direction);
+void handleMinutes(int direction);
+void handleSetTime_Menu();
+void handleWiFi_Menu();
+void handleCalib_Menu();
+// Handle weekdays
+void handleWeekdays(int direction)
+{
+  DoW = (DoW + direction) % MAX_WEEKDAYS;
+  if (DoW < 0)
+  {
+    DoW += MAX_WEEKDAYS;
+  }
+}
+
+// Handle days
+void handleDays(int direction)
+{
+  int maxDays = (months == 2) ? MAX_DAYS_FEB : MAX_DAYS_OTHER;
+  days = (days + direction) % maxDays;
+  if (days < 1)
+  {
+    days += maxDays;
+  }
+}
+
+// Handle months
+void handleMonths(int direction)
+{
+  months = (months + direction) % MAX_MONTHS;
+  if (months < 0)
+  {
+    months += MAX_MONTHS;
+  }
+}
+
+// Handle years
+void handleYears(int direction)
+{
+  years += direction;
+}
+
+// Handle hours
+void handleHours(int direction)
+{
+  _hours = (_hours + direction);
+  if (_hours < 0)
+  {
+    _hours = MAX_HOURS;
+  }
+  else if (_hours > MAX_HOURS)
+  {
+    _hours = 0;
+  }
+}
+// Handle minutes
+void handleMinutes(int direction)
+{
+  _minutes = (_minutes + direction);
+  if (_minutes < 0)
+  {
+    _minutes = MAX_MINUTES;
+  }
+  else if (_minutes > MAX_MINUTES)
+  {
+    _minutes = 0;
+  }
+}
+void handleSetTime_Menu()
+{
+  if (currentRotaryValue > previousRotaryValue)
+  {
+    if (set_time_flag)
+    {
+      if (clicked == 1)
+      {
+        switch (settime_menuIndex)
+        {
+        case 0:
+          handleWeekdays(1);
+          break;
+        case 1:
+          handleDays(1);
+          break;
+        case 2:
+          handleMonths(1);
+          break;
+        case 3:
+          handleYears(1);
+          break;
+        case 4:
+          handleHours(1);
+          break;
+        case 5:
+          handleMinutes(1);
+          break;
+        default:
+          break;
+        }
+      }
+      else
+      {
+        settime_menuIndex = (settime_menuIndex + 1) % 7;
+      }
+    }
+    else if (region_flag)
+    {
+      utc = (utc + 1) % 27;
+    }
+    else
+    {
+      rotatingDown = true;
+      time_menuIndex = (time_menuIndex + 1) % 5;
+    }
+  }
+  else
+  {
+    if (set_time_flag)
+    {
+      if (clicked == 1)
+      {
+        switch (settime_menuIndex)
+        {
+        case 0:
+          handleWeekdays(-1);
+          break;
+        case 1:
+          handleDays(-1);
+          break;
+        case 2:
+          handleMonths(-1);
+          break;
+        case 3:
+          handleYears(-1);
+          break;
+        case 4:
+          handleHours(-1);
+          break;
+        case 5:
+          handleMinutes(-1);
+          break;
+        default:
+          // clicked == 0;
+          break;
+        }
+      }
+      else
+      {
+        settime_menuIndex = (settime_menuIndex - 1) % 7;
+        if (settime_menuIndex < 0)
+          settime_menuIndex = 6;
+      }
+    }
+    else if (region_flag)
+    {
+      utc = (utc - 1) % 27;
+      if (utc < 0)
+        utc = 26;
+    }
+    else
+    {
+      rotatingDown = false;
+      time_menuIndex = (time_menuIndex - 1) % 5;
+      if (time_menuIndex < 0)
+        time_menuIndex = 4;
+    }
+  }
+}
+
+void handleWiFi_Menu()
+{
+  if (currentRotaryValue > previousRotaryValue)
+  {
+    rotatingDown = true;
+    wifiMenu_Index++;
+    if (wifiMenu_Index > 4)
+    {
+      wifiMenu_Index = 0;
+    }
+  }
+  else
+  {
+    rotatingDown = false;
+    wifiMenu_Index--;
+    if (wifiMenu_Index < 0)
+    {
+      wifiMenu_Index = 4;
+    }
+  }
+}
+
+void handleCalib_Menu()
+{
+  if (currentRotaryValue > previousRotaryValue)
+  {
+    offset = offset - 0.1;
+    if (offset < -5)
+    {
+      offset = 5;
+    }
+  }
+  else
+  {
+    offset = offset + 0.1;
+    if (offset > 5)
+    {
+      offset = -5;
+    }
+  }
+}
+
+void handleHardReset_Menu()
+{
+  if (currentRotaryValue > previousRotaryValue)
+  {
+    reset_sel = (reset_sel + 1) % 2;
+  }
+  else
+  {
+    reset_sel = (reset_sel - 1 + 2) % 2;
+  }
+}
 void batt_get(int *batt)
 {
   int lower = 1;
   int upper = 100;
-  *batt = analogRead(VBAT_PIN);
+  float battv;
+  battv = ((float)analogRead(VBAT_PIN) / 4095) * 3.3;
+  *batt = (uint8_t)((battv / 4.2) * 100);
   Serial.println(*batt);
 }
 void IRAM_ATTR readEncoderISR()
@@ -211,7 +444,7 @@ ERA_CONNECTED()
   // ElegantOTA.onStart(updating);
   // ElegantOTA.onEnd(updating_done);
   ERa_CONNECTED = true;
-  auto_time_mode = true;
+  sync_time_mode = true;
 }
 
 ERA_DISCONNECTED()
@@ -220,16 +453,7 @@ ERA_DISCONNECTED()
   Serial.println("ERa disconnected!");
   ERa_CONNECTED = false;
 }
-// void updating(){
-//   spr.fillSprite(TFT_BLACK);
-//   spr.setTextSize(2);
-//   spr.drawString("Updating....",20,50);
-// }
-// void updating_done(bool success){
-//   spr.fillSprite(TFT_BLACK);
-//   spr.setTextSize(2);
-//   spr.drawString("Done",20,50);
-// }
+
 void timerEvent()
 {
   ERA_LOG("Timer", "Uptime: %d", ERaMillis() / 1000L);
@@ -237,23 +461,6 @@ void timerEvent()
 void TaskEra(void *parameters)
 {
   Serial.println("E-Ra Task Started");
-  // WiFi.mode(WIFI_STA);
-  // wm.setConfigPortalBlocking(false);
-  // wm.setConfigPortalTimeout(60);
-  // if (wm.autoConnect("AutoConnectAP"))
-  // {
-  //   Serial.println("connected...yeey :)");
-  // }
-  // else
-  // {
-  //   Serial.println("Configportal running");
-  // }
-  // wifi_ap_record_t in4;
-  // wifi_config_t conf_pass;
-  // ssid = reinterpret_cast<char *>(in4.ssid);
-  // password = reinterpret_cast<char *>(conf_pass.sta.password);
-  // WiFi.mode(WIFI_STA);
-  // WiFi.begin(ssid, password);
   ERa.setScanWiFi(true);
   ERa.setPersistent(true);
   ERa.begin();
@@ -261,6 +468,11 @@ void TaskEra(void *parameters)
   for (;;)
   {
     ERa.run();
+    if (WiFi.status() == WL_CONNECTED && (millis() - prevMillis_client >= 10000))
+    {
+      prevMillis_client = millis();
+      get_Current_Weather();
+    }
     syncTime.setTimeZone(list[utc]);
     syncTime.getTime(ntpTime);
   }
@@ -271,7 +483,8 @@ void setup()
   Serial.begin(115200);
   syncTime.begin();
   dht.setup(DHTPIN, DHTesp::DHT11);
-
+  pinMode(32, OUTPUT);
+  digitalWrite(32, HIGH);
   OTADRIVE.setInfo(APIKEY, FW_VER);
   OTADRIVE.onUpdateFirmwareProgress(onUpdateProgress);
 
@@ -293,7 +506,7 @@ void setup()
   hours = EEPROM.read(add_hours);
   utc = EEPROM.read(add_utc);
   offset = EEPROM.read(add_offset);
-  auto_time_mode = EEPROM.read(add_auto_time);
+  sync_time_mode = EEPROM.read(add_auto_time);
   current_time = (hours * 3600 + minutes * 60 + seconds) - (list[utc] * 3600);
   rotaryEncoder.begin();
   rotaryEncoder.setup(readEncoderISR);
@@ -357,13 +570,9 @@ void get_3DayWeather()
     deserializeJson(doc, JSON_Data);
     JsonObject obj = doc.as<JsonObject>();
     // Display the Current Weather Info
-    temp_outside = obj["main"]["temp"].as<float>();
-    humi_outside = obj["main"]["humidity"].as<float>();
-    weather = obj["weather"][0]["description"].as<String>();
-    location = obj["name"].as<String>();
-    icon_id = obj["weather"][0]["icon"].as<String>();
-    id = obj["weather"][0]["id"].as<int>();
-    Serial.println(weather);
+    String dt;
+    dt = obj["list"][0]["dt_txt"][0].as<String>();
+    Serial.println(dt);
   }
   else
   {
@@ -380,14 +589,7 @@ void loop()
   }
   rotary_loop();
   hienthi();
-  temp_room = dht.getTemperature() + offset;
-  humi_room = dht.getHumidity() + offset;
-  if (WiFi.status() == WL_CONNECTED && (millis() - prevMillis_client >= 10000))
-  {
-    prevMillis_client = millis();
-    get_Current_Weather();
-  }
-  if (ERa_CONNECTED == true && auto_time_mode == true)
+  if (ERa_CONNECTED == true && sync_time_mode == true)
   {
     hours = ntpTime.hour;
     minutes = ntpTime.minute;
@@ -403,7 +605,9 @@ void loop()
     nhietdo = temperatureRead();
     second_count++;
     batt_get(&batt);
-    if (ERa_CONNECTED == false || auto_time_mode == false)
+    temp_room = dht.getTemperature() + offset;
+    humi_room = dht.getHumidity() + offset;
+    if (ERa_CONNECTED == false || sync_time_mode == false)
       time_calculate(current_time);
     if (second_count == 300)
     {
@@ -413,7 +617,7 @@ void loop()
       EEPROM.writeInt(add_minutes, minutes);
       EEPROM.writeInt(add_utc, utc);
       EEPROM.writeFloat(add_offset, offset);
-      EEPROM.writeBool(add_auto_time, auto_time_mode);
+      EEPROM.writeBool(add_auto_time, sync_time_mode);
       EEPROM.commit();
     }
   }
@@ -442,46 +646,6 @@ void time_calculate(unsigned long current_time)
 //////////////////////  setting_menu_flag Screen //////////////////////////////////////////////////
 void displayMenu()
 {
-#ifdef SH110X
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SH110X_WHITE);
-  display.setCursor(30, 0);
-  display.print("Setting");
-  display.setTextSize(1);
-  display.setTextColor(SH110X_WHITE);
-  display.setCursor(4, 10);
-  if (rotatingDown)
-  {
-    startIndex = setting_menuIndex - 2;
-    endIndex = setting_menuIndex + 1;
-  }
-  else
-  {
-    startIndex = setting_menuIndex - 1;
-    endIndex = setting_menuIndex + 2;
-  }
-  if (startIndex < 0)
-  {
-    startIndex = 0;
-    endIndex = (maxVisibleItems - 1);
-  }
-  else if (endIndex >= numMenus)
-  {
-    endIndex = numMenus - 1;
-    startIndex = endIndex - (maxVisibleItems - 1);
-  }
-  for (int i = startIndex; i <= endIndex; i++)
-  {
-    if (i == setting_menuIndex)
-    {
-      display.drawRoundRect(0, (i - startIndex) * 12 + 10, 120, 12, 3, SH110X_WHITE);
-    }
-    display.setCursor(4, (i - startIndex) * 12 + 12);
-    display.print(menus[i]);
-  }
-  display.display();
-#else
   spr.fillSprite(TFT_BLACK);
   spr.setTextColor(TFT_WHITE);
   spr.setTextSize(2);
@@ -523,7 +687,6 @@ void displayMenu()
     spr.drawString(menus[i], 14, (i - startIndex) * 33 + 35);
   }
   spr.pushSprite(0, 0);
-#endif
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////
 void hienthi()
@@ -567,36 +730,8 @@ void hienthi()
     maindisplay();
     sub_menu_flag = false;
     setting_menuIndex = 0;
-    //   if (WiFi.status() == WL_CONNECTED)
-    //   {
-    //     if (millis() - prevMillis >= 3000)
-    //     {
-    //       prevMillis = millis();
-    //       screen = !screen;
-    //     }
-    //     if (screen)
-    //     {
-    //       maindisplay();
-    //       sub_menu_flag = false;
-    //       setting_menuIndex = 0;
-    //     }
-    //     else
-    //     {
-    //       spr.fillScreen(TFT_BLACK);
-    //       weather_screen();
-    //       spr.pushSprite(0, 0);
-    //     }
-    //   }
-    //   else
-    //   {
-    //     maindisplay();
-    //     sub_menu_flag = false;
-    //     setting_menuIndex = 0;
-    //   }
-    // }
   }
 }
-#ifndef SH110X
 void weather_screen()
 {
   if (icon_id == "01d")
@@ -751,58 +886,9 @@ void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int
   JpegDec.decodeArray(arrayname, array_size);
   renderJPEG(x, y);
 }
-#endif
 ///////////////////// Main Screen ///////////////////////////////////////////////
 void maindisplay()
 {
-#ifdef SH110X
-  display.clearDisplay();
-  display.setTextColor(1);
-  display.setTextSize(1);
-  static const unsigned char PROGMEM image_weather_humidity_white_bits[] = {0x04, 0x00, 0x04, 0x00, 0x0c, 0x00, 0x0a, 0x00, 0x12, 0x00, 0x11, 0x00, 0x20, 0x80, 0x20, 0x80, 0x41, 0x40, 0x40, 0xc0, 0x80, 0xa0, 0x80, 0x20, 0x40, 0x40, 0x40, 0x40, 0x30, 0x80, 0x0f, 0x00};
-  static const unsigned char PROGMEM image_weather_temperature_bits[] = {0x1c, 0x00, 0x22, 0x02, 0x2b, 0x05, 0x2a, 0x02, 0x2b, 0x38, 0x2a, 0x60, 0x2b, 0x40, 0x2a, 0x40, 0x2a, 0x60, 0x49, 0x38, 0x9c, 0x80, 0xae, 0x80, 0xbe, 0x80, 0x9c, 0x80, 0x41, 0x00, 0x3e, 0x00};
-  static const unsigned char PROGMEM image_wifi_full_bits[] = {0x01, 0xf0, 0x00, 0x07, 0xfc, 0x00, 0x1e, 0x0f, 0x00, 0x39, 0xf3, 0x80, 0x77, 0xfd, 0xc0, 0xef, 0x1e, 0xe0, 0x5c, 0xe7, 0x40, 0x3b, 0xfb, 0x80, 0x17, 0x1d, 0x00, 0x0e, 0xee, 0x00, 0x05, 0xf4, 0x00, 0x03, 0xb8, 0x00, 0x01, 0x50, 0x00, 0x00, 0xe0, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00};
-  if (WiFi.status() != WL_CONNECTED)
-  {
-    display.drawBitmap(109, 47, image_wifi_not_connected_bits, 19, 16, 1);
-  }
-  else
-  {
-    if (!ERa_CONNECTED)
-    {
-      display.drawBitmap(105, 47, cham_thang, 2, 13, 1);
-    }
-    display.drawBitmap(109, 47, image_wifi_full_bits, 19, 16, 1);
-  }
-  display.drawLine(0, 45, 127, 45, 1);
-  display.setCursor(2, 51);
-  display.print(daysOfTheWeek[DoW]);
-  display.setCursor(44, 51);
-  display.print(monthOfTheYear[months]);
-  display.setCursor(26, 51);
-  display.print(days);
-  display.setCursor(67, 51);
-  display.print(years);
-  display.drawBitmap(83, 2, image_weather_humidity_white_bits, 11, 16, 1);
-  display.drawBitmap(2, 2, image_weather_temperature_bits, 16, 16, 1);
-  display.setCursor(24, 26);
-  display.print(hours);
-  display.setCursor(41, 26);
-  display.print(":");
-  display.setCursor(53, 26);
-  display.print(minutes);
-  display.setCursor(72, 26);
-  display.print(":");
-  display.setCursor(85, 26);
-  display.print(seconds);
-  display.setCursor(97, 8);
-  display.print(humi_room);
-  display.setCursor(109, 8);
-  display.print("%");
-  display.setCursor(19, 8);
-  display.print(temp_room);
-  display.display();
-#else
   spr.fillScreen(TFT_BLACK);
   if (batt > 83)
   {
@@ -828,13 +914,9 @@ void maindisplay()
   {
     spr.drawBitmap(0, 0, image_battery_17_bits, 24, 16, 0xF800);
   }
-
-  oldsecond = seconds;
   spr.setTextSize(1);
   byte xpos = 10;
   byte ypos = 23;
-  // spr.setTextColor(0x3186, TFT_BLACK);  // Leave a 7 segment ghost image, comment out next line!
-  // spr.drawString("88:88:88",xpos,ypos,7); // Overwrite the text to clear it
   spr.setTextColor(0xB7C0);
   if (hours < 10)
     xpos += spr.drawChar('0', xpos, ypos, 7);
@@ -934,19 +1016,19 @@ void maindisplay()
       spr.drawBitmap(29, 1, image_wifi_full_bits, 19, 16, TFT_WHITE, TFT_BLACK);
     }
   }
+  spr.setTextSize(1);
+  spr.drawNumber(batt, 79, 6);
   spr.pushSprite(0, 0);
-#endif
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void rotary_loop()
 {
-  if (rotaryEncoder.encoderChanged()) // if rotary change
+  if (rotaryEncoder.encoderChanged())
   {
-    currentRotaryValue = rotaryEncoder.readEncoder(); // save currrent value
-    lastRotaryChange = millis();
-    if (!sub_menu_flag) // if user not in any sub menu(setting_menu_flag screen)
+    currentRotaryValue = rotaryEncoder.readEncoder();
+    if (sub_menu_flag == false)
     {
-      if (currentRotaryValue > previousRotaryValue) // same clockwise
+      if (currentRotaryValue > previousRotaryValue)
       {
         rotatingDown = true;
         setting_menuIndex++;
@@ -967,231 +1049,19 @@ void rotary_loop()
     }
     else // on sub menu
     {
-      switch (setting_menuIndex) // Check what sub menu is sel and change value of that submenu
+      switch (setting_menuIndex)
       {
-      case 0:                                         // Set time sel
-        if (currentRotaryValue > previousRotaryValue) // increase value
-        {
-          if (set_time_flag)
-          { // if date/time setting_menu_flag was sel
-            if (clicked == 1)
-            { // check what value user want to change
-              switch (settime_menuIndex)
-              {
-              case 0: // WeekDays
-                ++DoW;
-                if (DoW > 6)
-                {
-                  DoW = 0;
-                }
-                break;
-              case 1: // Days
-                days++;
-                if (months == 1 && days > 28)
-                {
-                  days = 1;
-                }
-                else if (days > 31 && (months == 0 || months == 2 || months == 4 || months == 6 || months == 7 || months == 9 || months == 11))
-                {
-                  days = 1;
-                }
-                else if (days > 30)
-                {
-                  days = 1;
-                }
-                break;
-              case 2: // Months
-                months++;
-                if (months > 11)
-                {
-                  months = 0;
-                }
-                break;
-              case 3: // Years
-                years += 1;
-                break;
-              case 4: // Hours
-                _hours++;
-                if (_hours > 23)
-                {
-                  _hours = 0;
-                }
-                break;
-              case 5: // Minutes
-                _minutes++;
-                if (_minutes > 59)
-                {
-                  _minutes = 0;
-                }
-                break;
-              default:
-                break;
-              }
-            }
-            else
-            {
-              settime_menuIndex++;
-              if (settime_menuIndex > 6)
-              {
-                settime_menuIndex = 0;
-              }
-            }
-          }
-          else if (region_flag == true)
-          { // if region sel
-            utc++;
-            if (utc > 26)
-            {
-              utc = 0;
-            }
-          }
-          else
-          {
-            rotatingDown = true;
-            time_menuIndex++;
-            if (time_menuIndex > 4)
-              time_menuIndex = 0;
-          }
-        }
-        else // decrease value
-        {
-          if (set_time_flag)
-          {
-            if (clicked == 1)
-            {
-              switch (settime_menuIndex)
-              {
-              case 0:
-                --DoW;
-                if (DoW < 0)
-                {
-                  DoW = 6;
-                }
-                break;
-              case 1:
-                days--;
-                if (months == 1 && days < 1)
-                {
-                  days = 28;
-                }
-                else if (days < 1 && (months == 0 || months == 2 || months == 4 || months == 6 || months == 7 || months == 9 || months == 11))
-                {
-                  days = 31;
-                }
-                else if (days < 1)
-                {
-                  days = 30;
-                }
-                break;
-              case 2:
-                months--;
-                if (months < 0)
-                {
-                  months = 11;
-                }
-                break;
-              case 3:
-                years -= 1;
-                break;
-              case 4:
-                _hours--;
-                if (_hours < 0)
-                {
-                  _hours = 24;
-                }
-                break;
-              case 5:
-                _minutes--;
-                if (_minutes < 0)
-                {
-                  _minutes = 60;
-                }
-                break;
-              default:
-                break;
-              }
-            }
-            else
-            {
-              settime_menuIndex--;
-              if (settime_menuIndex < 0)
-              {
-                settime_menuIndex = 6;
-              }
-            }
-          }
-          else if (region_flag == true)
-          {
-            utc--;
-            if (utc < 0)
-            {
-              utc = 26;
-            }
-          }
-          else
-          {
-            rotatingDown = true;
-            time_menuIndex--;
-            if (time_menuIndex < 0)
-              time_menuIndex = 4;
-          }
-        }
+      case 0:
+        handleSetTime_Menu();
         break;
       case 1: // wifi sel
-        if (currentRotaryValue > previousRotaryValue)
-        {
-          rotatingDown = true;
-          wifiMenu_choose++;
-          if (wifiMenu_choose > 4)
-          {
-            wifiMenu_choose = 0;
-          }
-        }
-        else
-        {
-          rotatingDown = false;
-          wifiMenu_choose--;
-          if (wifiMenu_choose < 0)
-          {
-            wifiMenu_choose = 4;
-          }
-        }
+        handleWiFi_Menu();
         break;
-      case 2: // Change offset value
-        if (currentRotaryValue > previousRotaryValue)
-        {
-          offset = offset - 0.1;
-          if (offset < -5)
-          {
-            offset = 5;
-          }
-        }
-        else
-        {
-          offset = offset + 0.1;
-          if (offset > 5)
-          {
-            offset = -5;
-          }
-        }
+      case 3: // Change offset value
+        handleCalib_Menu();
         break;
       case 4: // Choose Reset or Not
-        if (currentRotaryValue > previousRotaryValue)
-        {
-          reset_sel++;
-          if (reset_sel > 1)
-          {
-            reset_sel = 0;
-          }
-        }
-        else
-        {
-          reset_sel--;
-          if (reset_sel < 0)
-          {
-            reset_sel = 1;
-          }
-        }
+        handleHardReset_Menu();
         break;
       default:
         break;
@@ -1199,12 +1069,12 @@ void rotary_loop()
     }
     previousRotaryValue = currentRotaryValue;
   }
+
   handle_rotary_button();
 }
 void handle_rotary_button()
 {
   static unsigned long lastTimeButtonDown = 0;
-  unsigned long time_clicked = 0;
   static bool isLongpress = false;
   static bool isSettingpress = false;
   bool isEncoderButtonDown = rotaryEncoder.isEncoderButtonDown();
@@ -1213,15 +1083,6 @@ void handle_rotary_button()
     if (!lastTimeButtonDown)
     {
       lastTimeButtonDown = millis();
-      // click_time++;
-      // if (millis() - doubleClickMillis <= 500)
-      // {
-      //   doubleClickMillis = millis();
-      //   Serial.println("DoubleClick");
-      //   click_time = 0;
-      // }
-      // if (click_time > 1)
-      //   click_time = 0;
     }
     if (!isLongpress && (millis() - lastTimeButtonDown >= longPressAfterMiliseconds) && sub_menu_flag)
     {
@@ -1254,12 +1115,9 @@ void handle_rotary_button()
         Serial.println("Setting Press");
         setting_menu_flag = !setting_menu_flag;
         isSettingpress = true;
-#ifndef SH110X
         spr.fillScreen(TFT_BLACK);
-#endif
       }
     }
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////
   }
   else
   {
@@ -1270,22 +1128,18 @@ void handle_rotary_button()
       /////////////////////// Button control on Set Time submenu( Date/Time setting_menu_flag -> Set Time) /////////////////
       if (rotaryEncoder.readButtonState() == BUT_DOWN && set_time_flag == true)
       {
-        clicked++;
-      }
-      if (clicked > 1)
-      {
-        clicked = 0;
+        clicked = !clicked;
       }
       ///////////////////////////////////////////////////////////////////////////////
 
-      ////////////////////datet/time setting_menu_flag Action /////////////////////////////////
+      ////////////////////Datet/Time setting_menu_flag Action /////////////////////////////////
       if (setting_menuIndex == 0 && ontime_setting == true)
       { // control submenu 1
         byte xpos;
         switch (time_menuIndex) // Date/time setting_menu_flag
         {
         case 0: // Set time setting_menu_flag
-          set_time_flag = true;
+
           if (settime_menuIndex == 6)
           { // Back from Date/time Seting
             set_time_flag = false;
@@ -1293,28 +1147,18 @@ void handle_rotary_button()
             clicked = 0;
             time_setting();
           }
+          else
+          {
+            set_time_flag = true;
+          }
           break;
         case 1:
-          auto_time_mode = !auto_time_mode;
+          sync_time_mode = !sync_time_mode;
           break;
         case 2: // Region setting_menu_flag
           region_flag = true;
           break;
         case 3: // Save
-#ifdef SH110X
-          for (int x = 0; x < 20; x++)
-          {
-
-            display.clearDisplay();
-            display.fillScreen(TFT_BLACK);
-            display.setTextColor(TFT_WHITE);
-            display.setTextSize(3);
-            display.setCursor(24, 18);
-            display.print("SAVED");
-            display.display();
-          }
-
-#else
           spr.fillScreen(TFT_BLACK);
           spr.setTextColor(0xFFFF);
           spr.setTextSize(3);
@@ -1328,13 +1172,12 @@ void handle_rotary_button()
             spr.pushSprite(0, 0);
             delay(200);
           }
-#endif
-          // EEPROM.writeInt(add_hours,hours);
-          // EEPROM.writeInt(add_minutes,minutes);
-          // EEPROM.writeInt(add_seconds,seconds);
-          // EEPROM.writeInt(add_utc,utc);
-          // EEPROM.writeBool(add_auto_time,auto_time_mode);
-          // EEPROM.commit();
+          EEPROM.writeInt(add_hours, hours);
+          EEPROM.writeInt(add_minutes, minutes);
+          EEPROM.writeInt(add_seconds, seconds);
+          EEPROM.writeInt(add_utc, utc);
+          EEPROM.writeBool(add_auto_time, sync_time_mode);
+          EEPROM.commit();
           current_time = (_hours * 3600 + _minutes * 60) - (list[utc] * 3600);
           time_setting();
           break;
@@ -1365,48 +1208,33 @@ void handle_rotary_button()
       //////////////////////////////////////////////////////////////////////
 
       ///////////////// WiFi setting_menu_flag Action /////////////////////////////////
-      if (wifiMenu_choose == 3 && setting_menuIndex == 1 && WiFi.status() == WL_CONNECTED) // Disconnect
+      if (wifiMenu_Index == 3 && setting_menuIndex == 1 && WiFi.status() == WL_CONNECTED) // Disconnect
       {
-#ifdef SH110X
-        display.clearDisplay();
-        display.fillScreen(TFT_BLACK);
-        display.setTextColor(TFT_WHITE);
-        display.setCursor(16, 13);
-        display.print("Disconnecting");
-        display.display();
-        display.setCursor(95, 13);
-#else
         spr.fillScreen(TFT_BLACK);
         spr.setTextColor(0xFFFF);
         spr.setTextSize(2);
         spr.drawString("Disconnecting", 22, 88);
         spr.pushSprite(0, 0);
-#endif
         byte xpos = 22;
         for (int i = 0; i < 5; i++)
         {
-#ifdef SH110X
-          display.print(".");
-          display.display();
-#else
           xpos += 20;
           spr.setTextSize(3);
           spr.setTextColor(0xFFFF);
           spr.drawString(".", xpos, 110);
           spr.pushSprite(0, 0);
-#endif
           delay(300);
         }
-        auto_time_mode = false;
+        sync_time_mode = false;
         current_time = (hours * 3600 + minutes * 60 + seconds) - (list[utc] * 3600);
         wifi();
         ERa.switchToConfig(true);
         delay(100);
       }
-      else if (wifiMenu_choose == 4 && setting_menuIndex == 1 && WiFi.status() == WL_CONNECTED) // Back
+      else if (wifiMenu_Index == 4 && setting_menuIndex == 1 && WiFi.status() == WL_CONNECTED) // Back
       {
         sub_menu_flag = false;
-        wifiMenu_choose = -1;
+        wifiMenu_Index = -1;
         displayMenu();
       }
       ////////////////// END WiFi setting_menu_flag Action//////////////////////////////////
@@ -1443,89 +1271,10 @@ void set_time()
     sprintf(str_hours, "%u", _hours);
     sprintf(str_minutes, "%u", _minutes);
     const char *rs[] = {daysOfTheWeek[DoW], str_ngay, monthOfTheYear[months], str_nam, str_hours, str_minutes};
-#ifdef SH110X
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SH110X_WHITE);
-    display.setCursor(11, 3);
-    display.print("Date/Time Setting");
-#else
     spr.fillScreen(TFT_BLACK);
     spr.setTextColor(0xFFFF);
     spr.setTextSize(2);
     spr.drawString("Date/Time Setting", 20, 11);
-#endif
-    if (auto_time_mode == true && ERa_CONNECTED == true)
-    {
-#ifdef SH110X
-      display.clearDisplay();
-      display.fillScreen(TFT_BLACK);
-      display.setTextColor(TFT_WHITE);
-      display.setCursor(17, 14);
-      display.print("AuTo Time Is ON");
-      display.setCursor(6, 33);
-      display.print("Turn OFF To Use This");
-      display.display();
-#else
-      spr.fillScreen(TFT_BLACK);
-      spr.setTextColor(0xFFFF);
-      spr.setTextSize(2);
-      spr.drawString("Auto Time Is ON", 30, 50);
-      spr.drawString("Turn OFF To Use This", 0, 97);
-      spr.drawBitmap(97, 67, image_Warning_bits, 30, 23, 0xFFEA);
-      spr.pushSprite(0, 0);
-#endif
-      delay(2000);
-      set_time_flag = false;
-      clicked == 0;
-      time_setting();
-      return;
-    }
-#ifdef SH110X
-    if (rotatingDown)
-    {
-      startsetTimeIndex = settime_menuIndex - 2;
-      endsetTimeIndex = settime_menuIndex + 1;
-    }
-    else
-    {
-      startsetTimeIndex = settime_menuIndex - 1;
-      endsetTimeIndex = settime_menuIndex + 2;
-    }
-    if (startsetTimeIndex < 0)
-    {
-      startsetTimeIndex = 0;
-      endsetTimeIndex = 3;
-    }
-    else if (endsetTimeIndex >= 7)
-    {
-      endsetTimeIndex = 6;
-      startsetTimeIndex = endsetTimeIndex - 3;
-    }
-    for (int i = startsetTimeIndex; i <= endsetTimeIndex; i++)
-    {
-      display.setCursor(6, (i - startsetTimeIndex) * 12 + 13);
-      if (i == settime_menuIndex)
-      {
-        if (clicked == 1 && i <= 5)
-        {
-          display.drawRoundRect(strlen(settime_menu[i]) * 5 + 12, (i - startsetTimeIndex) * 12 + 11, strlen(rs[i]) * 5 + 10, 12, 3, SH110X_WHITE);
-        }
-        else
-        {
-          display.drawRoundRect(0, (i - startsetTimeIndex) * 12 + 11, 120, 12, 3, SH110X_WHITE);
-        }
-      }
-      display.print(settime_menu[i]);
-      if (i > 5)
-      {
-        continue;
-      }
-      display.setCursor(strlen(settime_menu[i]) * 5 + 15, (i - startsetTimeIndex) * 12 + 13);
-      display.print(rs[i]);
-    }
-    display.display();
-#else
     if (rotatingDown)
     {
       startsetTimeIndex = settime_menuIndex - 4;
@@ -1569,68 +1318,32 @@ void set_time()
       spr.drawString(rs[i], spr.textWidth(settime_menu[i]) + 10, (i - startsetTimeIndex) * 28 + 37);
     }
     spr.pushSprite(0, 0);
-#endif
   }
 }
 void time_setting()
 {
-#ifdef SH110X
-  if (set_time_flag == true)
-  {
-    set_time();
-    return;
-  }
-  if (region_flag == true)
-  {
-    region();
-    return;
-  }
-  String time_menu[] = {"Set Time", "Sync Time: ", "Region", "Save", "Back"};
-  String mode[] = {"OFF", "ON"};
-  display.clearDisplay();
-  display.fillScreen(TFT_BLACK);
-  display.setTextColor(TFT_WHITE);
-  display.setTextSize(1);
-  display.setCursor(10, 0);
-  display.print("Time Setting");
-  if (rotatingDown)
-  {
-    startTimeIndex = time_menuIndex - 2;
-    endTimeIndex = time_menuIndex + 1;
-  }
-  else
-  {
-    startTimeIndex = time_menuIndex - 1;
-    endTimeIndex = time_menuIndex + 2;
-  }
-  if (startTimeIndex < 0)
-  {
-    startTimeIndex = 0;
-    endTimeIndex = 3;
-  }
-  else if (endTimeIndex >= 5)
-  {
-    endTimeIndex = 4;
-    startTimeIndex = endTimeIndex - 3;
-  }
-  for (int i = startTimeIndex; i <= endTimeIndex; i++)
-  {
-    display.setCursor(6, (i - startTimeIndex) * 12 + 13);
-    if (i == time_menuIndex)
-    {
-      display.drawRoundRect(0, (i - startTimeIndex) * 12 + 11, 120, 12, 3, SH110X_WHITE);
-    }
-    display.print(time_menu[i]);
-  }
-  display.setCursor(75, (1 - startTimeIndex) * 13 + 13);
-  display.print(mode[auto_time_mode]);
-  display.display();
-#else
   spr.fillSprite(TFT_BLACK);
   if (set_time_flag == true)
   {
-    set_time();
-    return;
+    if (sync_time_mode == true && ERa_CONNECTED == true)
+    {
+      spr.fillScreen(TFT_BLACK);
+      spr.setTextColor(0xFFFF);
+      spr.setTextSize(2);
+      spr.drawString("Auto Time Is ON", 30, 50);
+      spr.drawString("Turn OFF To Use This", 0, 97);
+      spr.drawBitmap(97, 67, image_Warning_bits, 30, 23, 0xFFEA);
+      spr.pushSprite(0, 0);
+      delay(2000);
+      set_time_flag = false;
+      clicked == 0;
+      time_setting();
+      return;
+    }
+    else
+    {
+      set_time();
+    }
   }
   if (region_flag == true)
   {
@@ -1667,10 +1380,10 @@ void time_setting()
   {
     if (time_menuIndex == 1)
     {
-      spr.drawRoundRect(10, (1 - startTimeIndex) * 33 + 30, spr.textWidth(time_menu[1]) + spr.textWidth(mode[auto_time_mode]) + 5, 25, 4, TFT_WHITE);
+      spr.drawRoundRect(10, (1 - startTimeIndex) * 33 + 30, spr.textWidth(time_menu[1]) + spr.textWidth(mode[sync_time_mode]) + 5, 25, 4, TFT_WHITE);
       spr.setTextColor(TFT_WHITE);
       spr.drawString(time_menu[1], 14, (1 - startTimeIndex) * 33 + 35);
-      spr.drawString(mode[auto_time_mode], spr.textWidth(time_menu[1]) + 5, (1 - startTimeIndex) * 33 + 35);
+      spr.drawString(mode[sync_time_mode], spr.textWidth(time_menu[1]) + 5, (1 - startTimeIndex) * 33 + 35);
       spr.setTextColor(0x4208);
     }
     else if (i == time_menuIndex)
@@ -1681,42 +1394,14 @@ void time_setting()
     else
     {
       spr.setTextColor(0x4208);
-      spr.drawString(mode[auto_time_mode], spr.textWidth(time_menu[1]) + 3, (1 - startTimeIndex) * 33 + 35);
+      spr.drawString(mode[sync_time_mode], spr.textWidth(time_menu[1]) + 3, (1 - startTimeIndex) * 33 + 35);
     }
     spr.drawString(time_menu[i], 14, (i - startTimeIndex) * 33 + 35);
   }
   spr.pushSprite(0, 0);
-#endif
 }
 void region()
 {
-#ifdef SH110X
-  display.clearDisplay();
-  display.setTextColor(SH110X_WHITE);
-  display.setTextSize(1);
-  display.setCursor(25, 4);
-  display.print("Region Setting");
-  display.setCursor(34, 19);
-  display.print("UTC:");
-  display.setCursor(68, 19);
-  display.print(region_list[utc]);
-  display.setTextSize(2);
-  display.setCursor(15, 43);
-  display.print(hours);
-  display.setTextSize(1);
-  display.setCursor(42, 47);
-  display.print(":");
-  display.setTextSize(2);
-  display.setCursor(53, 43);
-  display.print(minutes);
-  display.setTextSize(1);
-  display.setCursor(81, 47);
-  display.print(":");
-  display.setTextSize(2);
-  display.setCursor(92, 43);
-  display.print(seconds);
-  display.display();
-#else
   spr.fillScreen(TFT_BLACK);
   spr.setTextColor(TFT_WHITE);
   spr.setTextColor(0xFFFF);
@@ -1752,25 +1437,9 @@ void region()
     spr.setTextColor(0xFBE0, TFT_BLACK);
   }
   spr.pushSprite(0, 0);
-#endif
 }
 void calib()
 {
-#ifdef SH110X
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SH110X_WHITE);
-  display.setCursor(10, 0);
-  display.print("OFF Setting");
-  display.setTextSize(2);
-  display.setTextColor(SH110X_WHITE);
-  display.setCursor(20, 20);
-  display.setTextSize(1);
-  display.print("OFFSET: ");
-  display.setCursor(70, 20);
-  display.print(offset);
-  display.display();
-#else
   spr.fillScreen(TFT_BLACK);
   spr.setTextColor(TFT_WHITE);
   spr.setTextColor(0xFFEA);
@@ -1780,47 +1449,9 @@ void calib()
   spr.drawString("OFFSET:", 37, 108);
   spr.drawFloat(offset, 2, 140, 108);
   spr.pushSprite(0, 0);
-#endif
 }
 void hard_reset()
 {
-#ifdef SH110X
-  String choose[] = {"No", "Yes"};
-  display.clearDisplay();
-  display.fillScreen(TFT_BLACK);
-  display.setTextColor(TFT_WHITE);
-  display.setCursor(16, 8);
-  display.print("Hard Resetting...");
-  display.setCursor(4, 28);
-  display.print("Are You Sure?");
-  display.setCursor(90, 28);
-  if (reset_sel > 0)
-    display.print(choose[reset_sel]);
-  else
-  {
-    display.print(choose[0]);
-    reset_sel = 0;
-  }
-  if (enable_reset)
-  {
-    display.clearDisplay();
-    display.fillScreen(TFT_BLACK);
-    display.setTextColor(TFT_WHITE);
-    display.setCursor(31, 23);
-    display.print("Resetting..");
-    display.display();
-    for (int i = 0; i < FLASH_MEMORY_SIZE; i++)
-    {
-      EEPROM.write(i, 0);
-      EEPROM.commit();
-    }
-    WiFi.disconnect();
-    delay(2000);
-    ESP.restart();
-  }
-  display.display();
-#else
-
   String choose[] = {"No", "Yes"};
   // display.clearDisplay();
   spr.fillScreen(TFT_BLACK);
@@ -1880,7 +1511,6 @@ void hard_reset()
     ESP.restart();
   }
   spr.pushSprite(0, 0);
-#endif
 }
 void onUpdateProgress(int progress, int totalt)
 {
@@ -1889,29 +1519,15 @@ void onUpdateProgress(int progress, int totalt)
   int progressPercent = (100 * progress) / totalt;
   spr.setTextSize(2);
   spr.setTextColor(0xFFFF);
-  spr.drawString("New Version Availble", 6, 72);
+  spr.drawString("Update Availble", 6, 72);
   spr.drawString("On Process....", 6, 99);
-  // if (last != progressPercent && progressPercent % 10 == 0)
-  // {
-  //   // print every 10%
-  //   Serial.printf("%d", progressPercent);
-  // }
   last = progressPercent;
   spr.drawNumber(progressPercent, 90, 127);
+  spr.drawString("%", spr.textWidth((String)progressPercent) + 2, 127);
   spr.pushSprite(0, 0);
 }
 void Update_Screen()
 {
-#ifdef SH110X
-  // display.clearDisplay();
-  // display.setTextColor(TFT_WHITE);
-  // display.setTextSize(1);
-  // display.setCursor(21, 15);
-  // display.print("Developing.....");
-  // display.display();
-  delay(2000);
-  return;
-#else
   if (WiFi.status() == WL_CONNECTED)
   {
     spr.fillSprite(TFT_BLACK);
@@ -1970,7 +1586,6 @@ void Update_Screen()
     displayMenu();
     return;
   }
-#endif
 }
 String ConverIpToString(IPAddress ip)
 {
@@ -2021,76 +1636,6 @@ String RSSIasQuality()
 }
 void wifi()
 {
-#ifdef SH110X
-  if (WiFi.status() != WL_CONNECTED)
-  {
-    display.clearDisplay();
-    display.setTextColor(1);
-    display.setCursor(4, 3);
-    display.print("Connect to");
-    display.setCursor(7, 23);
-    display.print(SSID_AP);
-    display.setCursor(2, 46);
-    display.print("And Scan -->");
-    display.drawBitmap(69, 0, image_qr_1_bits, 64, 64, 1);
-    display.display();
-  }
-  else if (WiFi.status() == WL_CONNECTED)
-  {
-    IPAddress ip;
-    ip = WiFi.localIP();
-
-    String mac;
-    if (millis() - preRSSI >= 5000)
-    {
-      rssi = RSSIasQuality();
-    }
-    mac = WiFi.macAddress();
-    const char *wifi_menu[] = {"SSID: ", "IP:", "MAC:", "RSSI: ", "Disconnect", "Back"};
-    String infor[] = {WiFi.SSID(), ConverIpToString(ip), mac, rssi};
-    display.clearDisplay();
-    display.setTextColor(1);
-    display.setTextSize(1);
-    display.setCursor(10, 0);
-    display.print("WiFi Setting");
-    if (rotatingDown)
-    {
-      startWifiIndex = wifiMenu_choose - 2;
-      endWifiIndex = wifiMenu_choose + 1;
-    }
-    else
-    {
-      startWifiIndex = wifiMenu_choose - 1;
-      endWifiIndex = wifiMenu_choose + 2;
-    }
-    if (startWifiIndex < 0)
-    {
-      startWifiIndex = 0;
-      endWifiIndex = 3;
-    }
-    else if (endWifiIndex >= 6)
-    {
-      endWifiIndex = 5;
-      startWifiIndex = endWifiIndex - 3;
-    }
-    for (int i = startWifiIndex; i <= endWifiIndex; i++)
-    {
-      if (i == wifiMenu_choose)
-      {
-        display.drawRoundRect(0, (i - startWifiIndex) * 12 + 10, 128, 12, 3, SH110X_WHITE);
-      }
-      display.setCursor(2, (i - startWifiIndex) * 12 + 12);
-      display.print(wifi_menu[i]);
-      if (i > 3)
-      {
-        continue;
-      }
-      display.setCursor(strlen(wifi_menu[i]) * 3 + 12, (i - startWifiIndex) * 12 + 12);
-      display.print(infor[i]);
-    }
-    display.display();
-  }
-#else
   if (WiFi.status() != WL_CONNECTED)
   {
     spr.fillScreen(TFT_BLACK);
@@ -2128,13 +1673,13 @@ void wifi()
     spr.drawString("WiFi Infomation", 42, 15);
     if (rotatingDown)
     {
-      startWifiIndex = wifiMenu_choose - 3;
-      endWifiIndex = wifiMenu_choose + 2;
+      startWifiIndex = wifiMenu_Index - 3;
+      endWifiIndex = wifiMenu_Index + 2;
     }
     else
     {
-      startWifiIndex = wifiMenu_choose - 3;
-      endWifiIndex = wifiMenu_choose + 2;
+      startWifiIndex = wifiMenu_Index - 3;
+      endWifiIndex = wifiMenu_Index + 2;
     }
     if (startWifiIndex < 0)
     {
@@ -2149,7 +1694,7 @@ void wifi()
 
     for (int i = startWifiIndex; i <= endWifiIndex; i++)
     {
-      if (i == wifiMenu_choose)
+      if (i == wifiMenu_Index)
       {
         if (i > 2)
         {
@@ -2170,5 +1715,4 @@ void wifi()
     }
     spr.pushSprite(0, 0);
   }
-#endif
 }
