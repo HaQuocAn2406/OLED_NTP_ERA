@@ -31,7 +31,7 @@
 
 #define APIKEY "b182dce6-64e4-4650-972c-588489ec0fcc"
 // this app version
-#define FW_VER "v@1.2.22"
+#define FW_VER "v@1.2.23"
 
 #define MAX_DAYS_FEB 28
 #define MAX_DAYS_OTHER 31
@@ -139,6 +139,7 @@ int currentRotaryValue;
 int previousRotaryValue;
 int wifiMenu_Index = 0;
 int id;
+int percentage;
 float offset = 0.00;
 float nhietdo;
 float humi_room;
@@ -153,17 +154,13 @@ const int add_offset = 20;
 const int add_auto_time = 24;
 long preRSSI = 0;
 unsigned long lastTimeButtonDown = 0;
-unsigned long shortPressAfterMiliseconds = 50;
 unsigned long local_time;
 unsigned long longPressAfterMiliseconds = 2000;
 unsigned long entersettingAfterMiliseconds = 3000;
-unsigned long chagneModeAfterMiliseconds = 1000;
-unsigned long currentMillis = millis();
 unsigned long previousMillis = 0;
 unsigned long interval = 1000;
-unsigned int changemode = 0;
-unsigned int changemode_auto_time = 0;
 unsigned long current_time = -25200;
+unsigned long ota_progress_millis = 0;
 long prevMillis = 0, prevMillis_client = 0;
 String result;
 String weather;
@@ -182,11 +179,9 @@ void hard_reset();
 void Update_Screen();
 void wifi();
 void hienthi();
-#ifndef SH110X
 void weather_screen();
 void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int ypos);
 void renderJPEG(int xpos, int ypos);
-#endif
 void connect_succes();
 void get_Current_Weather();
 void get_3DayWeather();
@@ -204,7 +199,10 @@ void handleMinutes(int direction);
 void handleSetTime_Menu();
 void handleWiFi_Menu();
 void handleCalib_Menu();
-// Handle weekdays
+void onOTAStart();
+void onOTAProgress(size_t current, size_t final);
+void onOTAEnd(bool success);
+
 void handleWeekdays(int direction)
 {
   DoW = (DoW + direction) % MAX_WEEKDAYS;
@@ -214,7 +212,6 @@ void handleWeekdays(int direction)
   }
 }
 
-// Handle days
 void handleDays(int direction)
 {
   int maxDays = (months == 2) ? MAX_DAYS_FEB : MAX_DAYS_OTHER;
@@ -225,7 +222,6 @@ void handleDays(int direction)
   }
 }
 
-// Handle months
 void handleMonths(int direction)
 {
   months = (months + direction) % MAX_MONTHS;
@@ -235,13 +231,11 @@ void handleMonths(int direction)
   }
 }
 
-// Handle years
 void handleYears(int direction)
 {
   years += direction;
 }
 
-// Handle hours
 void handleHours(int direction)
 {
   _hours = (_hours + direction);
@@ -254,7 +248,7 @@ void handleHours(int direction)
     _hours = 0;
   }
 }
-// Handle minutes
+
 void handleMinutes(int direction)
 {
   _minutes = (_minutes + direction);
@@ -267,6 +261,7 @@ void handleMinutes(int direction)
     _minutes = 0;
   }
 }
+
 void handleSetTime_Menu()
 {
   if (currentRotaryValue > previousRotaryValue)
@@ -421,6 +416,7 @@ void handleHardReset_Menu()
     reset_sel = (reset_sel - 1 + 2) % 2;
   }
 }
+
 void batt_get(int *batt)
 {
   int lower = 1;
@@ -430,6 +426,7 @@ void batt_get(int *batt)
   *batt = (uint8_t)((battv / 4.2) * 100);
   Serial.println(*batt);
 }
+
 void IRAM_ATTR readEncoderISR()
 {
   rotaryEncoder.readEncoder_ISR();
@@ -441,8 +438,9 @@ ERA_CONNECTED()
   Serial.println("ERa connected!");
   ElegantOTA.begin(&server);
   server.begin();
-  // ElegantOTA.onStart(updating);
-  // ElegantOTA.onEnd(updating_done);
+  ElegantOTA.onStart(onOTAStart);
+  ElegantOTA.onProgress(onOTAProgress);
+  ElegantOTA.onEnd(onOTAEnd);
   ERa_CONNECTED = true;
   sync_time_mode = true;
 }
@@ -458,13 +456,14 @@ void timerEvent()
 {
   ERA_LOG("Timer", "Uptime: %d", ERaMillis() / 1000L);
 }
+
 void TaskEra(void *parameters)
 {
   Serial.println("E-Ra Task Started");
   ERa.setScanWiFi(true);
   ERa.setPersistent(true);
   ERa.begin();
-  // ERa.addInterval(1000L, timerEvent);
+  ERa.addInterval(1000L, timerEvent);
   for (;;)
   {
     ERa.run();
@@ -478,42 +477,6 @@ void TaskEra(void *parameters)
   }
 }
 
-void setup()
-{
-  Serial.begin(115200);
-  syncTime.begin();
-  dht.setup(DHTPIN, DHTesp::DHT11);
-  pinMode(32, OUTPUT);
-  digitalWrite(32, HIGH);
-  OTADRIVE.setInfo(APIKEY, FW_VER);
-  OTADRIVE.onUpdateFirmwareProgress(onUpdateProgress);
-
-#ifdef SH110X
-  display.begin(i2c_Address, true); // Address 0x3C default
-  display.display();
-  delay(2000);
-  display.clearDisplay();
-#else
-  spr.init();
-  // tft.setRotation(1);
-  spr.createSprite(240, 230);
-  spr.fillScreen(TFT_RED);
-  tft.fillScreen(TFT_BLACK);
-  spr.pushSprite(0, 0);
-#endif
-  EEPROM.begin(FLASH_MEMORY_SIZE);
-  minutes = EEPROM.read(add_minutes);
-  hours = EEPROM.read(add_hours);
-  utc = EEPROM.read(add_utc);
-  offset = EEPROM.read(add_offset);
-  sync_time_mode = EEPROM.read(add_auto_time);
-  current_time = (hours * 3600 + minutes * 60 + seconds) - (list[utc] * 3600);
-  rotaryEncoder.begin();
-  rotaryEncoder.setup(readEncoderISR);
-  rotaryEncoder.setBoundaries(-99999, 99999, true);
-  rotaryEncoder.disableAcceleration();
-  xTaskCreatePinnedToCore(TaskEra, "Task Era NTP", 10000, NULL, 1, NULL, 1);
-}
 void get_Current_Weather()
 {
 
@@ -549,6 +512,49 @@ void get_Current_Weather()
   }
   http.end();
 }
+
+void onOTAStart()
+{
+  // Log when OTA has started
+  Serial.println("OTA update started!");
+  // <Add your own code here>
+}
+
+void onOTAProgress(size_t current, size_t final)
+{
+  // Log every 1 second
+  spr.fillSprite(TFT_BLACK);
+  spr.setTextSize(2);
+  spr.setFreeFont();
+  spr.drawString("Update Available", 6, 71);
+  spr.drawString("On Process....", 6, 99);
+  if (millis() - ota_progress_millis > 1000)
+  {
+    ota_progress_millis = millis();
+    Serial.printf("OTA Progress Current: %u bytes, Final: %u bytes\n", current, final);
+  }
+  spr.pushSprite(0, 0);
+}
+
+void onOTAEnd(bool success)
+{
+  // Log when OTA has finished
+  spr.fillSprite(TFT_BLACK);
+  if (success)
+  {
+    Serial.println("OTA update finished successfully!");
+    spr.drawString("Update Done", 6, 71);
+  }
+  else
+  {
+    Serial.println("There was an error during OTA update!");
+    spr.drawString("Update Fail", 6, 71);
+  }
+  // <Add your own code here>
+  spr.pushSprite(0, 0);
+  delay(3000);
+}
+
 void get_3DayWeather()
 {
 
@@ -580,49 +586,7 @@ void get_3DayWeather()
   }
   http.end();
 }
-void loop()
-{
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    server.handleClient();
-    ElegantOTA.loop();
-  }
-  rotary_loop();
-  hienthi();
-  if (ERa_CONNECTED == true && sync_time_mode == true)
-  {
-    hours = ntpTime.hour;
-    minutes = ntpTime.minute;
-    seconds = ntpTime.second;
-    DoW = ntpTime.wDay - 1;
-    days = ntpTime.day;
-    months = ntpTime.month - 1;
-    years = ntpTime.year + 1970;
-  }
-  if (millis() - previousMillis >= 1000)
-  {
-    previousMillis = millis();
-    nhietdo = temperatureRead();
-    second_count++;
-    batt_get(&batt);
-    temp_room = dht.getTemperature() + offset;
-    humi_room = dht.getHumidity() + offset;
-    if (ERa_CONNECTED == false || sync_time_mode == false)
-      time_calculate(current_time);
-    if (second_count == 300)
-    {
-      second_count = 0;
-      EEPROM.writeInt(add_seconds, seconds);
-      EEPROM.writeInt(add_hours, hours);
-      EEPROM.writeInt(add_minutes, minutes);
-      EEPROM.writeInt(add_utc, utc);
-      EEPROM.writeFloat(add_offset, offset);
-      EEPROM.writeBool(add_auto_time, sync_time_mode);
-      EEPROM.commit();
-    }
-  }
-}
-///////////////// Extract Time From Timestamp /////////////////////////
+
 void time_calculate(unsigned long current_time)
 {
   unsigned long utc_time = current_time + (millis() / 1000);
@@ -641,9 +605,7 @@ void time_calculate(unsigned long current_time)
   // if (seconds < 10) Serial.print("0"); // Add leading zero if needed
   // Serial.println(seconds);
 }
-///////////////////////////////////////////////////////////////////////////////
 
-//////////////////////  setting_menu_flag Screen //////////////////////////////////////////////////
 void displayMenu()
 {
   spr.fillSprite(TFT_BLACK);
@@ -688,7 +650,7 @@ void displayMenu()
   }
   spr.pushSprite(0, 0);
 }
-///////////////////////////////////////////////////////////////////////////////////////////////
+
 void hienthi()
 {
   if (setting_menu_flag == true) // Vào setting menu
@@ -732,6 +694,7 @@ void hienthi()
     setting_menuIndex = 0;
   }
 }
+
 void weather_screen()
 {
   if (icon_id == "01d")
@@ -808,6 +771,7 @@ void weather_screen()
     drawArrayJpeg(_50d, sizeof(_50d), 50, 50);
   }
 }
+
 void renderJPEG(int xpos, int ypos)
 {
   // retrieve information about the image
@@ -879,6 +843,7 @@ void renderJPEG(int xpos, int ypos)
     }
   }
 }
+
 void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int ypos)
 {
   int x = xpos;
@@ -886,7 +851,7 @@ void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int
   JpegDec.decodeArray(arrayname, array_size);
   renderJPEG(x, y);
 }
-///////////////////// Main Screen ///////////////////////////////////////////////
+
 void maindisplay()
 {
   spr.fillScreen(TFT_BLACK);
@@ -1016,11 +981,9 @@ void maindisplay()
       spr.drawBitmap(29, 1, image_wifi_full_bits, 19, 16, TFT_WHITE, TFT_BLACK);
     }
   }
-  spr.setTextSize(1);
-  spr.drawNumber(batt, 79, 6);
   spr.pushSprite(0, 0);
 }
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void rotary_loop()
 {
   if (rotaryEncoder.encoderChanged())
@@ -1072,6 +1035,7 @@ void rotary_loop()
 
   handle_rotary_button();
 }
+
 void handle_rotary_button()
 {
   static unsigned long lastTimeButtonDown = 0;
@@ -1254,6 +1218,7 @@ void handle_rotary_button()
     lastTimeButtonDown = 0;
   }
 }
+
 void set_time()
 {
   _hours = hours;
@@ -1320,6 +1285,7 @@ void set_time()
     spr.pushSprite(0, 0);
   }
 }
+
 void time_setting()
 {
   spr.fillSprite(TFT_BLACK);
@@ -1400,6 +1366,7 @@ void time_setting()
   }
   spr.pushSprite(0, 0);
 }
+
 void region()
 {
   spr.fillScreen(TFT_BLACK);
@@ -1438,6 +1405,7 @@ void region()
   }
   spr.pushSprite(0, 0);
 }
+
 void calib()
 {
   spr.fillScreen(TFT_BLACK);
@@ -1450,6 +1418,7 @@ void calib()
   spr.drawFloat(offset, 2, 140, 108);
   spr.pushSprite(0, 0);
 }
+
 void hard_reset()
 {
   String choose[] = {"No", "Yes"};
@@ -1512,6 +1481,7 @@ void hard_reset()
   }
   spr.pushSprite(0, 0);
 }
+
 void onUpdateProgress(int progress, int totalt)
 {
   spr.fillSprite(TFT_BLACK);
@@ -1519,13 +1489,14 @@ void onUpdateProgress(int progress, int totalt)
   int progressPercent = (100 * progress) / totalt;
   spr.setTextSize(2);
   spr.setTextColor(0xFFFF);
-  spr.drawString("Update Availble", 6, 72);
-  spr.drawString("On Process....", 6, 99);
+  spr.drawString("Update Available", 6, 72);
+  spr.drawString("On Process:", 6, 99);
   last = progressPercent;
-  spr.drawNumber(progressPercent, 90, 127);
-  spr.drawString("%", spr.textWidth((String)progressPercent) + 2, 127);
+  spr.drawNumber(progressPercent, 143, 99);
+  spr.drawString("%", 143 + spr.textWidth((String)progressPercent) + 2, 99);
   spr.pushSprite(0, 0);
 }
+
 void Update_Screen()
 {
   if (WiFi.status() == WL_CONNECTED)
@@ -1587,6 +1558,7 @@ void Update_Screen()
     return;
   }
 }
+
 String ConverIpToString(IPAddress ip)
 {
   String res = "";
@@ -1597,6 +1569,7 @@ String ConverIpToString(IPAddress ip)
   res += String(((ip >> 8 * 3)) & 0xFF);
   return res;
 }
+
 String RSSIasQuality()
 {
   int res;
@@ -1634,6 +1607,7 @@ String RSSIasQuality()
   }
   return rssi;
 }
+
 void wifi()
 {
   if (WiFi.status() != WL_CONNECTED)
@@ -1714,5 +1688,77 @@ void wifi()
       spr.drawString(infor[i], spr.textWidth(wifi_menu[i]) + 5, (i - startWifiIndex) * 33 + 35);
     }
     spr.pushSprite(0, 0);
+  }
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  syncTime.begin();
+  dht.setup(DHTPIN, DHTesp::DHT11);
+  pinMode(32, OUTPUT);
+  digitalWrite(32, HIGH);
+  OTADRIVE.setInfo(APIKEY, FW_VER);
+  OTADRIVE.onUpdateFirmwareProgress(onUpdateProgress);
+  spr.init();
+  spr.createSprite(240, 230);
+  spr.fillScreen(TFT_RED);
+  tft.fillScreen(TFT_BLACK);
+  spr.pushSprite(0, 0);
+  EEPROM.begin(FLASH_MEMORY_SIZE);
+  minutes = EEPROM.read(add_minutes);
+  hours = EEPROM.read(add_hours);
+  utc = EEPROM.read(add_utc);
+  offset = EEPROM.read(add_offset);
+  sync_time_mode = EEPROM.read(add_auto_time);
+  current_time = (hours * 3600 + minutes * 60 + seconds) - (list[utc] * 3600);
+  rotaryEncoder.begin();
+  rotaryEncoder.setup(readEncoderISR);
+  rotaryEncoder.setBoundaries(-99999, 99999, true);
+  rotaryEncoder.disableAcceleration();
+  xTaskCreatePinnedToCore(TaskEra, "Task Era NTP", 10000, NULL, 1, NULL, 1);
+}
+
+void loop()
+{
+  rotary_loop();
+  hienthi();
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    server.handleClient();
+    ElegantOTA.loop();
+  }
+
+  if (ERa_CONNECTED == true && sync_time_mode == true)
+  {
+    hours = ntpTime.hour;
+    minutes = ntpTime.minute;
+    seconds = ntpTime.second;
+    DoW = ntpTime.wDay - 1;
+    days = ntpTime.day;
+    months = ntpTime.month - 1;
+    years = ntpTime.year + 1970;
+  }
+  if (millis() - previousMillis >= 1000)
+  {
+    previousMillis = millis();
+    nhietdo = temperatureRead();
+    second_count++;
+    batt_get(&batt);
+    temp_room = dht.getTemperature() + offset;
+    humi_room = dht.getHumidity() + offset;
+    if (ERa_CONNECTED == false || sync_time_mode == false)
+      time_calculate(current_time);
+    if (second_count == 300)
+    {
+      second_count = 0;
+      EEPROM.writeInt(add_seconds, seconds);
+      EEPROM.writeInt(add_hours, hours);
+      EEPROM.writeInt(add_minutes, minutes);
+      EEPROM.writeInt(add_utc, utc);
+      EEPROM.writeFloat(add_offset, offset);
+      EEPROM.writeBool(add_auto_time, sync_time_mode);
+      EEPROM.commit();
+    }
   }
 }
