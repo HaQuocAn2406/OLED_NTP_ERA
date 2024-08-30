@@ -75,10 +75,8 @@ AiEsp32RotaryEncoder rotaryEncoder(ENCODER_CLK, ENCODER_DT, ENCODER_SW);
 
 updateInfo inf;
 
-// WebServer server(80);
 String URL = "http://api.openweathermap.org/data/2.5/weather?";
 String URL_2 = "https://api.openweathermap.org/data/2.5/forecast?";
-/// @brief eb1d2c68ab206e3e4ecf26becc7ddc9c
 String API_KEY = "eb1d2c68ab206e3e4ecf26becc7ddc9c";
 WiFiClient client;
 WebServer server(80);
@@ -90,13 +88,9 @@ const char *daysOfTheWeek[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 const char *monthOfTheYear[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"};
 char SSID_AP[] = {"ERA"};
 String menus[] = {"Date/Time", "WiFi", "Update", "Calib DHT", "Hard Reset", "Back"};
-// float list[]={-12,-11,-10,-9.5,-9,-8,-7,-6,-5,-4,-3,-2.5,-2,-1,0,1,2,3,3.5,4,
-// 4.5,5,5.5,5.75,6,6.5,7,8,8.75,9,9.5,10,10.5,11,12,12.75,13,14};
-int list[] = {-12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
-// String region_list[]={"UTC-12","UTC-11","UTC-10","UTC-9:30","UTC-9","UTC-8","UTC-7","UTC-6","UTC-5",
-// "UTC-4","UTC-3","UTC-2:30","UTC-2","UTC-1","UTC","UTC+1","UTC+2","UTC+3","UTC+3:30","UTC+4","UTC+4:30",
-// "UTC+5","UTC+5:30","UTC+5:45","UTC+6","UTC+6:30","UTC+7","UTC+8","UTC+8:45","UTC+9","UTC+9:30","UTC+10",
-// "UTC+10:30","UTC+11","UTC+12","UTC+12:45","UTC+13","UTC+14"};
+
+int region_value[] = {-12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
+
 String region_list[] = {"UTC-12", "UTC-11", "UTC-10", "UTC-9", "UTC-8", "UTC-7", "UTC-6", "UTC-5",
                         "UTC-4", "UTC-3", "UTC-2", "UTC-1", "UTC", "UTC+1", "UTC+2", "UTC+3", "UTC+4",
                         "UTC+5", "UTC+6", "UTC+7", "UTC+8", "UTC+9", "UTC+10", "UTC+11", "UTC+12", "UTC+13", "UTC+14"};
@@ -111,9 +105,9 @@ int8_t minutes, _minutes;
 uint8_t seconds;
 int batt = 100;
 int clicked = 0;
+bool show_icon = false;
 bool enable_reset = false;
 bool sync_time_mode = false;
-bool auto_region_mode = false;
 bool sub_menu_flag = false;
 bool rotatingDown;
 bool setting_menu_flag = false;
@@ -126,7 +120,6 @@ int startWifiIndex, endWifiIndex;
 int startTimeIndex, endTimeIndex, startsetTimeIndex, endsetTimeIndex;
 int second_count = 0;
 int reset_sel = 0;
-int offset_utc;
 int utc = 19;
 int startIndex;
 int endIndex;
@@ -139,7 +132,6 @@ int currentRotaryValue;
 int previousRotaryValue;
 int wifiMenu_Index = 0;
 int id;
-int percentage;
 float offset = 0.00;
 float nhietdo;
 float humi_room;
@@ -158,11 +150,9 @@ unsigned long local_time;
 unsigned long longPressAfterMiliseconds = 2000;
 unsigned long entersettingAfterMiliseconds = 3000;
 unsigned long previousMillis = 0;
-unsigned long interval = 1000;
 unsigned long current_time = -25200;
-unsigned long ota_progress_millis = 0;
-long prevMillis = 0, prevMillis_client = 0;
-String result;
+unsigned long ota_progress_millis = 0, prevMillis_client = 0, preMillis_Screen = 0;
+
 String weather;
 String icon_id;
 void displayMenu();
@@ -472,7 +462,7 @@ void TaskEra(void *parameters)
       prevMillis_client = millis();
       get_Current_Weather();
     }
-    syncTime.setTimeZone(list[utc]);
+    syncTime.setTimeZone(region_value[utc]);
     syncTime.getTime(ntpTime);
   }
 }
@@ -590,7 +580,7 @@ void get_3DayWeather()
 void time_calculate(unsigned long current_time)
 {
   unsigned long utc_time = current_time + (millis() / 1000);
-  int time_offset = list[utc] * 3600; //
+  int time_offset = region_value[utc] * 3600; //
   unsigned long local_time = utc_time + time_offset;
   hours = (local_time / 3600) % 24;
   minutes = (local_time / 60) % 60;
@@ -688,6 +678,11 @@ void hienthi()
   }
   else // Hiển thị màn hình chính
   {
+    if ((millis() - preMillis_Screen > 3000) && ERa_CONNECTED)
+    {
+      preMillis_Screen = millis();
+      show_icon = !show_icon;
+    }
 
     maindisplay();
     sub_menu_flag = false;
@@ -700,75 +695,75 @@ void weather_screen()
   if (icon_id == "01d")
   {
 
-    drawArrayJpeg(_01d, sizeof(_01d), 50, 50);
+    drawArrayJpeg(_01d, sizeof(_01d), 118, 98);
   }
   else if (icon_id == "01n")
   {
-    drawArrayJpeg(_01n, sizeof(_01n), 50, 50);
+    drawArrayJpeg(_01n, sizeof(_01n), 118, 98);
   }
   else if (icon_id == "02d")
   {
-    drawArrayJpeg(_02d, sizeof(_02d), 50, 50);
+    drawArrayJpeg(_02d, sizeof(_02d), 118, 98);
   }
   else if (icon_id == "02n")
   {
-    drawArrayJpeg(_02n, sizeof(_02n), 50, 50);
+    drawArrayJpeg(_02n, sizeof(_02n), 118, 98);
   }
   else if (icon_id == "03d")
   {
-    drawArrayJpeg(_03d, sizeof(_03d), 50, 50);
+    drawArrayJpeg(_03d, sizeof(_03d), 118, 98);
   }
   else if (icon_id == "03n")
   {
-    drawArrayJpeg(_03n, sizeof(_03n), 50, 50);
+    drawArrayJpeg(_03n, sizeof(_03n), 118, 98);
   }
   else if (icon_id == "04n")
   {
-    drawArrayJpeg(_04n, sizeof(_04n), 50, 50);
+    drawArrayJpeg(_04n, sizeof(_04n), 118, 98);
   }
   else if (icon_id == "04d")
   {
-    drawArrayJpeg(_04d, sizeof(_04d), 50, 50);
+    drawArrayJpeg(_04d, sizeof(_04d), 118, 98);
   }
   else if (icon_id == "09n")
   {
-    drawArrayJpeg(_09n, sizeof(_09n), 50, 50);
+    drawArrayJpeg(_09n, sizeof(_09n), 118, 98);
   }
   else if (icon_id == "09d")
   {
-    drawArrayJpeg(_09n, sizeof(_09n), 50, 50);
+    drawArrayJpeg(_09n, sizeof(_09n), 118, 98);
   }
   else if (icon_id == "10n")
   {
-    drawArrayJpeg(_10n, sizeof(_10n), 50, 50);
+    drawArrayJpeg(_10n, sizeof(_10n), 118, 98);
   }
   else if (icon_id == "10d")
   {
-    drawArrayJpeg(_10d, sizeof(_10d), 50, 50);
+    drawArrayJpeg(_10d, sizeof(_10d), 118, 98);
   }
   else if (icon_id == "11d")
   {
-    drawArrayJpeg(_11d, sizeof(_11d), 50, 50);
+    drawArrayJpeg(_11d, sizeof(_11d), 118, 98);
   }
   else if (icon_id == "11n")
   {
-    drawArrayJpeg(_11n, sizeof(_11n), 50, 50);
+    drawArrayJpeg(_11n, sizeof(_11n), 118, 98);
   }
   else if (icon_id == "13d")
   {
-    drawArrayJpeg(_13d, sizeof(_13d), 50, 50);
+    drawArrayJpeg(_13d, sizeof(_13d), 118, 98);
   }
   else if (icon_id == "13n")
   {
-    drawArrayJpeg(_13n, sizeof(_13n), 50, 50);
+    drawArrayJpeg(_13n, sizeof(_13n), 118, 98);
   }
   else if (icon_id == "50n")
   {
-    drawArrayJpeg(_50n, sizeof(_50n), 50, 50);
+    drawArrayJpeg(_50n, sizeof(_50n), 118, 98);
   }
   else if (icon_id == "50d")
   {
-    drawArrayJpeg(_50d, sizeof(_50d), 50, 50);
+    drawArrayJpeg(_50d, sizeof(_50d), 118, 98);
   }
 }
 
@@ -855,6 +850,7 @@ void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int
 void maindisplay()
 {
   spr.fillScreen(TFT_BLACK);
+
   if (batt > 83)
   {
     spr.drawBitmap(0, 0, image_battery_full_bits, 24, 16, 0x1FE0);
@@ -913,11 +909,25 @@ void maindisplay()
   spr.drawString("%", 27 + spr.textWidth((String)humi_room) - 38 + 6, 138);
   spr.drawFloat(temp_room, 1, 27, 160);
   spr.drawString("OUTDOOR", 137, 113);
-  spr.drawBitmap(125, 135, image_weather_humidity_bits, 11, 16, 0x57FF);
-  spr.drawNumber(humi_outside, 146, 136);
-  spr.drawString("%", 146 + spr.textWidth((String)humi_outside) - 38 + 6, 138);
-  spr.drawBitmap(125, 161, image_weather_temperature_bits, 16, 16, 0xFAAA);
-  spr.drawFloat(temp_outside, 1, 146, 163);
+  if (show_icon)
+  {
+    // spr.fillSprite(TFT_BLACK);
+    spr.fillRect(118, 98, 120, 93, TFT_BLACK);
+    spr.drawLine(0, 104, 239, 104, 0xFFFF);
+    spr.drawLine(114, 104, 114, 189, 0xFFFF);
+    spr.drawLine(0, 190, 239, 190, 0x57FF);
+    spr.drawLine(0, 229, 238, 229, 0x57FF);
+    weather_screen();
+    // spr.pushSprite(0, 0);
+  }
+  else
+  {
+    spr.drawBitmap(125, 135, image_weather_humidity_bits, 11, 16, 0x57FF);
+    spr.drawNumber(humi_outside, 146, 136);
+    spr.drawString("%", 146 + spr.textWidth((String)humi_outside) - 38 + 6, 138);
+    spr.drawBitmap(125, 161, image_weather_temperature_bits, 16, 16, 0xFAAA);
+    spr.drawFloat(temp_outside, 1, 146, 163);
+  }
   if (id >= 200 && id <= 232)
   {
     spr.drawBitmap(3, 211, image_weather_cloud_lightning_bolt_bits, 17, 16, 0x37E);
@@ -1142,7 +1152,7 @@ void handle_rotary_button()
           EEPROM.writeInt(add_utc, utc);
           EEPROM.writeBool(add_auto_time, sync_time_mode);
           EEPROM.commit();
-          current_time = (_hours * 3600 + _minutes * 60) - (list[utc] * 3600);
+          current_time = (_hours * 3600 + _minutes * 60) - (region_value[utc] * 3600);
           time_setting();
           break;
         case 4: // Back
@@ -1190,10 +1200,11 @@ void handle_rotary_button()
           delay(300);
         }
         sync_time_mode = false;
-        current_time = (hours * 3600 + minutes * 60 + seconds) - (list[utc] * 3600);
-        wifi();
-        ERa.switchToConfig(true);
-        delay(100);
+        current_time = (hours * 3600 + minutes * 60 + seconds) - (region_value[utc] * 3600);
+        // wifi();
+        // ERa.switchToConfig(true);
+        // delay(100);
+        ESP.restart();
       }
       else if (wifiMenu_Index == 4 && setting_menuIndex == 1 && WiFi.status() == WL_CONNECTED) // Back
       {
@@ -1622,10 +1633,10 @@ void wifi()
     spr.setTextColor(0xFFEA);
     spr.setTextSize(1);
     spr.drawString(ERA_AUTH_TOKEN, 15, 107);
-    uint16_t colour = random(0x10000);
-    spr.setTextColor(colour);
+    spr.setTextColor(TFT_WHITE);
     spr.setTextSize(2);
-    spr.drawString(SSID_AP, 148, 24);
+    spr.setCursor(148, 24);
+    spr.print("\"ERA\"");
     spr.drawBitmap(69, 127, image_frame_removebg_preview_bits, 100, 100, 0xFFFF);
     spr.pushSprite(0, 0);
   }
@@ -1711,7 +1722,7 @@ void setup()
   utc = EEPROM.read(add_utc);
   offset = EEPROM.read(add_offset);
   sync_time_mode = EEPROM.read(add_auto_time);
-  current_time = (hours * 3600 + minutes * 60 + seconds) - (list[utc] * 3600);
+  current_time = (hours * 3600 + minutes * 60 + seconds) - (region_value[utc] * 3600);
   rotaryEncoder.begin();
   rotaryEncoder.setup(readEncoderISR);
   rotaryEncoder.setBoundaries(-99999, 99999, true);
