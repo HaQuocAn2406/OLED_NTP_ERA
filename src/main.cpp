@@ -3,12 +3,14 @@
 #define ERA_AUTH_TOKEN "2a377e27-cf9a-4061-ba71-bdcedde02e64"
 #define ERA_DEBUG
 #define ERA_SERIAL Serial
+#include <ctype.h>
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
 #include <AiEsp32RotaryEncoder.h>
 #include <EEPROM.h>
 #include <ERa.hpp>
+#include <Widgets/ERaWidgets.hpp>
 #include <Time/ERaEspTime.hpp>
 #include <string.h>
 #include <TFT_eSPI.h>
@@ -69,6 +71,7 @@ byte xcolon = 0;
 byte x2colon = 0;
 #endif
 DHTesp dht;
+TempAndHumidity value;
 ERaEspTime syncTime;
 TimeElement_t ntpTime;
 AiEsp32RotaryEncoder rotaryEncoder(ENCODER_CLK, ENCODER_DT, ENCODER_SW);
@@ -86,8 +89,6 @@ String lon = "106.7074488";
 
 const char *daysOfTheWeek[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 const char *monthOfTheYear[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"};
-char SSID_AP[] = {"ERA"};
-String menus[] = {"Date/Time", "WiFi", "Update", "Calib DHT", "Hard Reset", "Back"};
 
 int region_value[] = {-12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
 
@@ -192,7 +193,8 @@ void handleCalib_Menu();
 void onOTAStart();
 void onOTAProgress(size_t current, size_t final);
 void onOTAEnd(bool success);
-
+void Draw_Weather_Icon();
+// char* toLowerCase(const char* str);
 void handleWeekdays(int direction)
 {
   DoW = (DoW + direction) % MAX_WEEKDAYS;
@@ -409,10 +411,8 @@ void handleHardReset_Menu()
 
 void batt_get(int *batt)
 {
-  int lower = 1;
-  int upper = 100;
   float battv;
-  battv = ((float)analogRead(VBAT_PIN) / 4095) * 3.3;
+  battv = ((float)analogRead(VBAT_PIN) / 4095) * 4.2;
   *batt = (uint8_t)((battv / 4.2) * 100);
   Serial.println(*batt);
 }
@@ -431,6 +431,7 @@ ERA_CONNECTED()
   ElegantOTA.onStart(onOTAStart);
   ElegantOTA.onProgress(onOTAProgress);
   ElegantOTA.onEnd(onOTAEnd);
+  get_Current_Weather();
   ERa_CONNECTED = true;
   sync_time_mode = true;
 }
@@ -442,9 +443,29 @@ ERA_DISCONNECTED()
   ERa_CONNECTED = false;
 }
 
+// char* toLowerCase(const char* str) {
+//     // Allocate memory for the new string
+//     char* lowerStr =(char*) malloc(strlen(str) + 1);
+//     if (lowerStr == NULL) {
+//         return NULL; // Memory allocation failed
+//     }
+//     // Copy and convert each character to lowercase
+//     for (int i = 0; str[i]; i++) {
+//         lowerStr[i] = tolower((unsigned char)str[i]);
+//     }
+//     lowerStr[strlen(str)] = '\0'; // Null-terminate the new string
+
+//     return lowerStr;
+// }
 void timerEvent()
 {
   ERA_LOG("Timer", "Uptime: %d", ERaMillis() / 1000L);
+  ERa.virtualWrite(V0, temp_room);
+  ERa.virtualWrite(V1, humi_room);
+  ERa.virtualWrite(V2, temp_outside);
+  ERa.virtualWrite(V3, humi_outside);
+  ERa.virtualWrite(V4, batt);
+  ERa.virtualWrite(V6, weather.c_str());
 }
 
 void TaskEra(void *parameters)
@@ -457,7 +478,7 @@ void TaskEra(void *parameters)
   for (;;)
   {
     ERa.run();
-    if (WiFi.status() == WL_CONNECTED && (millis() - prevMillis_client >= 10000))
+    if (WiFi.status() == WL_CONNECTED && (millis() - prevMillis_client >= 60000 * 10))
     {
       prevMillis_client = millis();
       get_Current_Weather();
@@ -469,7 +490,6 @@ void TaskEra(void *parameters)
 
 void get_Current_Weather()
 {
-
   HTTPClient http;
   // Set HTTP Request Final URL with Location and API key information
   http.begin(URL + "lat=" + lat + "&lon=" + lon + "&units=metric&appid=" + API_KEY + "&lang=en");
@@ -598,6 +618,7 @@ void time_calculate(unsigned long current_time)
 
 void displayMenu()
 {
+  String menus[] = {"Date/Time", "WiFi", "Update", "Calib DHT", "Hard Reset", "Back"};
   spr.fillSprite(TFT_BLACK);
   spr.setTextColor(TFT_WHITE);
   spr.setTextSize(2);
@@ -683,7 +704,6 @@ void hienthi()
       preMillis_Screen = millis();
       show_icon = !show_icon;
     }
-
     maindisplay();
     sub_menu_flag = false;
     setting_menuIndex = 0;
@@ -847,10 +867,47 @@ void drawArrayJpeg(const uint8_t arrayname[], uint32_t array_size, int xpos, int
   renderJPEG(x, y);
 }
 
+void Draw_Weather_Icon()
+{
+  if (id >= 200 && id <= 232)
+  {
+    spr.drawBitmap(3, 211, image_weather_cloud_lightning_bolt_bits, 17, 16, 0x37E, TFT_BLACK);
+  }
+  else if (id >= 300 && id <= 521)
+  {
+    spr.drawBitmap(3, 211, image_weather_cloud_rain_bits, 17, 16, 0x57FF, TFT_BLACK);
+  }
+  else if (id == 800)
+  {
+    if (icon_id == "01d")
+    {
+      spr.drawBitmap(3, 211, image_weather_sun_bits, 15, 16, 0xFFEA, TFT_BLACK);
+    }
+    else if (icon_id == "01n")
+    {
+      spr.drawBitmap(3, 211, image_moon_bits, 16, 16, 0xFFFF, TFT_BLACK);
+    }
+  }
+  else if (id == 801)
+  {
+    if (icon_id == "02d")
+    {
+      spr.drawBitmap(3, 211, image_weather_cloud_sunny_bits, 17, 16, 0xFFEA, TFT_BLACK);
+    }
+    else if (icon_id == "02n")
+    {
+      spr.drawBitmap(3, 211, image_cloud_3_bits, 17, 16, 0xFFEA, TFT_BLACK);
+    }
+  }
+  else if (id >= 802 && id <= 804)
+  {
+    spr.drawBitmap(3, 211, image_cloud_3_bits, 17, 16, 0xFFEA, TFT_BLACK);
+  }
+}
+
 void maindisplay()
 {
   spr.fillScreen(TFT_BLACK);
-
   if (batt > 83)
   {
     spr.drawBitmap(0, 0, image_battery_full_bits, 24, 16, 0x1FE0);
@@ -902,7 +959,7 @@ void maindisplay()
   ////////////////////////////////////////////////////////
   spr.setTextColor(0xFFFF, TFT_BLACK);
   spr.setTextSize(2);
-  spr.drawString("INDOOR", 8, 114);
+  spr.drawString("INDOOR", 16, 114);
   spr.drawBitmap(5, 135, image_weather_humidity_bits, 11, 16, 0x57FF);
   spr.drawBitmap(5, 161, image_weather_temperature_bits, 16, 16, 0xFAAA);
   spr.drawNumber(humi_room, 27, 137);
@@ -928,46 +985,35 @@ void maindisplay()
     spr.drawBitmap(125, 161, image_weather_temperature_bits, 16, 16, 0xFAAA);
     spr.drawFloat(temp_outside, 1, 146, 163);
   }
-  if (id >= 200 && id <= 232)
+  Draw_Weather_Icon();
+  if (spr.textWidth(weather) >= 230)
   {
-    spr.drawBitmap(3, 211, image_weather_cloud_lightning_bolt_bits, 17, 16, 0x37E);
-  }
-  else if (id >= 300 && id <= 521)
-  {
-    spr.drawBitmap(3, 211, image_weather_cloud_rain_bits, 17, 16, 0x57FF);
-  }
-  else if (id == 800)
-  {
-    if (icon_id == "01d")
+    static int x = spr.width();
+    static long preM = 0;
+    // if (millis() - preM > 10)
+    // {
+    preM = millis();
+    spr.drawString(weather, x, 209);
+    if (--x < -spr.textWidth(weather))
     {
-      spr.drawBitmap(3, 211, image_weather_sun_bits, 15, 16, 0xFFEA);
+      x = spr.width();
     }
-    else if (icon_id == "01n")
+    else if (x < 22)
     {
-      spr.drawBitmap(3, 211, image_moon_bits, 16, 16, 0xFFFF);
+      spr.fillRect(-5, 208, 28, 18, TFT_BLACK);
+      Draw_Weather_Icon();
     }
+    // }
   }
-  else if (id == 801)
+  else
   {
-    if (icon_id == "02d")
-    {
-      spr.drawBitmap(3, 211, image_weather_cloud_sunny_bits, 17, 16, 0xFFEA);
-    }
-    else if (icon_id == "02n")
-    {
-      spr.drawBitmap(3, 211, image_cloud_3_bits, 17, 16, 0xFFEA);
-    }
+    spr.drawString(weather, 22, 209);
   }
-  else if (id >= 802 && id <= 804)
-  {
-    spr.drawBitmap(3, 211, image_cloud_3_bits, 17, 16, 0xFFEA);
-  }
-  spr.drawString(weather, 22, 209);
   spr.drawString(location, 3, 194);
   spr.drawString(daysOfTheWeek[DoW], 28, 80);
   spr.drawNumber(days, 79, 80);
-  spr.drawString(monthOfTheYear[months], 112, 80);
-  spr.drawNumber(years, 162, 80);
+  spr.drawString(monthOfTheYear[months], 108, 80);
+  spr.drawNumber(years, spr.textWidth(monthOfTheYear[months]) + 17 + 108, 80);
   spr.drawLine(0, 104, 239, 104, 0xFFFF);
   spr.drawLine(114, 104, 114, 189, 0xFFFF);
   spr.drawLine(0, 190, 239, 190, 0x57FF);
@@ -1066,7 +1112,7 @@ void handle_rotary_button()
       { // back from region setting_menu_flag ( hold 2s)
         region_flag = false;
         time_menuIndex = 2;
-        time_setting();
+        // time_setting();
         return;
       }
       if (setting_menuIndex == 1 && WiFi.status() != WL_CONNECTED)
@@ -1102,6 +1148,14 @@ void handle_rotary_button()
       /////////////////////// Button control on Set Time submenu( Date/Time setting_menu_flag -> Set Time) /////////////////
       if (rotaryEncoder.readButtonState() == BUT_DOWN && set_time_flag == true)
       {
+        if (settime_menuIndex == 6)
+        { // Back from Date/time Seting
+          set_time_flag = false;
+          settime_menuIndex = 0;
+          time_menuIndex = -1;
+          clicked = 0;
+          return;
+        }
         clicked = !clicked;
       }
       ///////////////////////////////////////////////////////////////////////////////
@@ -1114,17 +1168,10 @@ void handle_rotary_button()
         {
         case 0: // Set time setting_menu_flag
 
-          if (settime_menuIndex == 6)
-          { // Back from Date/time Seting
-            set_time_flag = false;
-            settime_menuIndex = 0;
-            clicked = 0;
-            time_setting();
-          }
-          else
-          {
-            set_time_flag = true;
-          }
+          // else
+          // {
+          set_time_flag = true;
+          // }
           break;
         case 1:
           sync_time_mode = !sync_time_mode;
@@ -1153,7 +1200,7 @@ void handle_rotary_button()
           EEPROM.writeBool(add_auto_time, sync_time_mode);
           EEPROM.commit();
           current_time = (_hours * 3600 + _minutes * 60) - (region_value[utc] * 3600);
-          time_setting();
+          // time_setting();
           break;
         case 4: // Back
           sub_menu_flag = false;
@@ -1232,75 +1279,76 @@ void handle_rotary_button()
 
 void set_time()
 {
-  _hours = hours;
-  _minutes = minutes;
-  while (set_time_flag)
+
+  // while (set_time_flag)
+  // {
+  rotary_loop();
+  const char *settime_menu[] = {"WeekDays:", "Days:", "Months:", "Years:", "Hours:", "Minutes:", "Back"};
+  char str_ngay[4]; // Make sure the buffer is large enough
+  char str_nam[5];
+  char str_hours[3];
+  char str_minutes[3];
+  sprintf(str_ngay, "%u", days);
+  sprintf(str_nam, "%u", years);
+  sprintf(str_hours, "%u", _hours);
+  sprintf(str_minutes, "%u", _minutes);
+  const char *rs[] = {daysOfTheWeek[DoW], str_ngay, monthOfTheYear[months], str_nam, str_hours, str_minutes};
+  spr.fillScreen(TFT_BLACK);
+  spr.setTextColor(0xFFFF);
+  spr.setTextSize(2);
+  spr.drawString("Date/Time Setting", 20, 11);
+  if (rotatingDown)
   {
-    rotary_loop();
-    const char *settime_menu[] = {"WeekDays:", "Days:", "Months:", "Years:", "Hours:", "Minutes:", "Back"};
-    char str_ngay[4]; // Make sure the buffer is large enough
-    char str_nam[5];
-    char str_hours[3];
-    char str_minutes[3];
-    sprintf(str_ngay, "%u", days);
-    sprintf(str_nam, "%u", years);
-    sprintf(str_hours, "%u", _hours);
-    sprintf(str_minutes, "%u", _minutes);
-    const char *rs[] = {daysOfTheWeek[DoW], str_ngay, monthOfTheYear[months], str_nam, str_hours, str_minutes};
-    spr.fillScreen(TFT_BLACK);
+    startsetTimeIndex = settime_menuIndex - 4;
+    endsetTimeIndex = settime_menuIndex + 3;
+  }
+  else
+  {
+    startsetTimeIndex = settime_menuIndex - 4;
+    endsetTimeIndex = settime_menuIndex + 3;
+  }
+  if (startsetTimeIndex < 0)
+  {
+    startsetTimeIndex = 0;
+    endsetTimeIndex = (7 - 1);
+  }
+  else if (endsetTimeIndex >= 7)
+  {
+    endsetTimeIndex = 7 - 1;
+    startsetTimeIndex = endsetTimeIndex - (7 - 1);
+  }
+  for (int i = startsetTimeIndex; i <= endsetTimeIndex; i++)
+  {
     spr.setTextColor(0xFFFF);
     spr.setTextSize(2);
-    spr.drawString("Date/Time Setting", 20, 11);
-    if (rotatingDown)
+    spr.drawString(settime_menu[i], 10, (i - startsetTimeIndex) * 28 + 37);
+    if (i == settime_menuIndex)
     {
-      startsetTimeIndex = settime_menuIndex - 4;
-      endsetTimeIndex = settime_menuIndex + 3;
-    }
-    else
-    {
-      startsetTimeIndex = settime_menuIndex - 4;
-      endsetTimeIndex = settime_menuIndex + 3;
-    }
-    if (startsetTimeIndex < 0)
-    {
-      startsetTimeIndex = 0;
-      endsetTimeIndex = (7 - 1);
-    }
-    else if (endsetTimeIndex >= 7)
-    {
-      endsetTimeIndex = 7 - 1;
-      startsetTimeIndex = endsetTimeIndex - (7 - 1);
-    }
-    for (int i = startsetTimeIndex; i <= endsetTimeIndex; i++)
-    {
-      spr.setTextColor(0xFFFF);
-      spr.setTextSize(2);
-      spr.drawString(settime_menu[i], 10, (i - startsetTimeIndex) * 28 + 37);
-      if (i == settime_menuIndex)
+      if (clicked == 1 && i <= 5)
       {
-        if (clicked == 1 && i <= 5)
-        {
-          spr.drawRoundRect(spr.textWidth(settime_menu[i]) + 8, (i - startsetTimeIndex) * 28 + 35, spr.textWidth(rs[i]) + 3, 19, 3, TFT_WHITE);
-        }
-        else
-        {
-          spr.drawRoundRect(5, (i - startsetTimeIndex) * 28 + 35, spr.textWidth(settime_menu[i]) + spr.textWidth(rs[i]) + 10, 19, 3, TFT_WHITE);
-        }
+        spr.drawRoundRect(spr.textWidth(settime_menu[i]) + 8, (i - startsetTimeIndex) * 28 + 35, spr.textWidth(rs[i]) + 3, 19, 3, TFT_WHITE);
       }
-      if (i > 5)
+      else
       {
-        continue;
+        spr.drawRoundRect(5, (i - startsetTimeIndex) * 28 + 35, spr.textWidth(settime_menu[i]) + spr.textWidth(rs[i]) + 10, 19, 3, TFT_WHITE);
       }
-      spr.drawString(rs[i], spr.textWidth(settime_menu[i]) + 10, (i - startsetTimeIndex) * 28 + 37);
     }
-    spr.pushSprite(0, 0);
+    if (i > 5)
+    {
+      continue;
+    }
+    spr.drawString(rs[i], spr.textWidth(settime_menu[i]) + 10, (i - startsetTimeIndex) * 28 + 37);
   }
+  spr.pushSprite(0, 0);
+  // }
 }
 
 void time_setting()
 {
   spr.fillSprite(TFT_BLACK);
-  if (set_time_flag == true)
+  _hours = hours;
+  _minutes = minutes;
+  while (set_time_flag == true)
   {
     if (sync_time_mode == true && ERa_CONNECTED == true)
     {
@@ -1314,8 +1362,8 @@ void time_setting()
       delay(2000);
       set_time_flag = false;
       clicked == 0;
-      time_setting();
-      return;
+      // time_setting();
+      // break;
     }
     else
     {
@@ -1433,7 +1481,6 @@ void calib()
 void hard_reset()
 {
   String choose[] = {"No", "Yes"};
-  // display.clearDisplay();
   spr.fillScreen(TFT_BLACK);
   spr.setTextColor(TFT_WHITE);
   spr.drawBitmap(22, 15, image_Warning_bits, 30, 23, 0xFFEA);
@@ -1753,9 +1800,11 @@ void loop()
   if (millis() - previousMillis >= 1000)
   {
     previousMillis = millis();
-    nhietdo = temperatureRead();
     second_count++;
     batt_get(&batt);
+    dht.getTempAndHumidity();
+    temp_room = value.temperature;
+    humi_room = value.humidity;
     temp_room = dht.getTemperature() + offset;
     humi_room = dht.getHumidity() + offset;
     if (ERa_CONNECTED == false || sync_time_mode == false)
