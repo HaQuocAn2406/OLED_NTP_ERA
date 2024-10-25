@@ -12,7 +12,7 @@
 #include <ERa.hpp>
 #include <Widgets/ERaWidgets.hpp>
 #include <Time/ERaEspTime.hpp>
-#include <string.h>
+#include <String.h>
 #include <TFT_eSPI.h>
 #include <SPI.h>
 #include <DHTesp.h>
@@ -1762,7 +1762,9 @@ void setup()
   spr.createSprite(240, 230);
   spr.fillScreen(TFT_RED);
   tft.fillScreen(TFT_BLACK);
+  tft.setRotation(2);
   spr.pushSprite(0, 0);
+  spr.setRotation(2);
   EEPROM.begin(FLASH_MEMORY_SIZE);
   minutes = EEPROM.read(add_minutes);
   hours = EEPROM.read(add_hours);
@@ -1805,8 +1807,8 @@ void loop()
     dht.getTempAndHumidity();
     temp_room = value.temperature;
     humi_room = value.humidity;
-    temp_room = dht.getTemperature() + offset;
-    humi_room = dht.getHumidity() + offset;
+    temp_room = dht.getTemperature();
+    humi_room = dht.getHumidity();
     if (ERa_CONNECTED == false || sync_time_mode == false)
       time_calculate(current_time);
     if (second_count == 300)
